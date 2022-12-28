@@ -25,9 +25,9 @@ namespace dae
 				m_pCamera.get()->Update(pTimer);
 		}
 
-		void AddMesh(const Mesh& mesh);
+		void AddMesh(Mesh* mesh);
 
-		inline const Camera& GetCamera() const { return *m_pCamera.get(); }
+		inline Camera& GetCamera() const { return *m_pCamera.get(); }
 
 	protected:
 		std::vector<std::unique_ptr<Mesh>> m_pMeshes;

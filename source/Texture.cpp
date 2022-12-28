@@ -48,7 +48,7 @@ namespace dae
 	TextureDX11::TextureDX11(SDL_Surface* pSurface, ID3D11Device* pDevice)
 	{
 		Init(pSurface, pDevice);
-		SDL_FreeSurface(pSurface);
+		//SDL_FreeSurface(pSurface);
 	}
 
 	TextureDX11::~TextureDX11()

@@ -1,7 +1,10 @@
 #include "pch.h"
 #include "Renderer.h"
 
-namespace dae {
+namespace dae 
+{
+	Light* Renderer::m_pLightBuffer{nullptr};
+	Camera* Renderer::m_pCameraBuffer{nullptr};
 
 	Renderer::Renderer(SDL_Window* pWindow) :
 		m_pWindow(pWindow)

@@ -3,9 +3,13 @@
 #include "Scene.h"
 #include "Camera.h"
 #include "DataTypes.h"
+#include "ResourceManager.h"
+#include "Texture.h"
 
 namespace dae
 {
+	Material* SoftwareRasterizer::m_pMaterialBuffer{ nullptr };
+
 	SoftwareRasterizer::SoftwareRasterizer(SDL_Window* pWindow)
 		: Renderer(pWindow)
 	{
@@ -41,6 +45,16 @@ namespace dae
 		// set all depthbuffer elements to max float value
 		std::fill_n(m_pDepthBuffer, m_Width * m_Height, FLT_MAX);
 
+		//temp-------//
+		Light light{};
+		light.direction = { 0.577f, -0.577f, 0.577f };
+		light.direction.Normalize();
+		light.intensity = 7.f;
+
+		m_pLightBuffer = &light;
+		m_pCameraBuffer = &pScene->GetCamera();
+		//-----------//
+
 		//RENDER LOGIC
 		for (auto& pMesh : pScene->m_pMeshes)
 		{
@@ -56,6 +70,8 @@ namespace dae
 
 	void SoftwareRasterizer::RenderMesh(Mesh* pMesh, const Camera& camera) const
 	{
+		m_pMaterialBuffer = &ResourceManager::GetMaterial(pMesh->materialId);
+
 		VertexTransformationFunction(*pMesh, camera);
 
 		size_t step{ GetIndexStep(pMesh->primitiveTopology) };
@@ -93,7 +109,7 @@ namespace dae
 
 			//parse unchanged data
 			transformedVertex.uv = vertex.uv;
-			transformedVertex.color = vertex.color;
+			//transformedVertex.color = vertex.color;
 
 			// to viewspace
 			transformedVertex.normal = mesh.worldMatrix.TransformVector(vertex.normal);
@@ -239,7 +255,47 @@ namespace dae
 
 	Uint32 SoftwareRasterizer::PixelShading(const Vertex_Out& vertex) const
 	{
-		return Uint32();
+		assert(m_pMaterialBuffer && "materialbuffer is nullptr!\n");
+
+		//get textures
+		auto& diffuseMap{ ResourceManager::GetTexture(m_pMaterialBuffer->textures[0]) };
+		auto& normalMap{ ResourceManager::GetTexture(m_pMaterialBuffer->textures[1]) };
+		auto& specularMap{ ResourceManager::GetTexture(m_pMaterialBuffer->textures[2]) };
+		auto& glossinessMap{ ResourceManager::GetTexture(m_pMaterialBuffer->textures[3]) };
+
+		ColorRGB colorOut{};
+
+		//normal
+		Vector3 normal{};
+		const Vector3 binormal = Vector3::Cross(vertex.normal, vertex.tangent);
+		const Matrix tbn = Matrix{ vertex.tangent,binormal,vertex.normal,Vector3::Zero };
+
+		const ColorRGB normalColor{ (2 * normalMap.Sample(vertex.uv)) - ColorRGB{1,1,1} };
+		const Vector3 normalSample{ normalColor.r,normalColor.g,normalColor.b };
+		normal = tbn.TransformVector(normalSample);
+
+		//shading
+		float observedArea{ std::max(Vector3::Dot(normal, -m_pLightBuffer->direction), 0.f) };
+
+		ColorRGB baseColor{ diffuseMap.Sample(vertex.uv) };
+		ColorRGB ambient{ 0.025f, 0.025f, 0.025f };
+		ColorRGB diffuse{ Lambert(1.f, baseColor) };
+		float spec{ specularMap.Sample(vertex.uv).r };
+		float glossiness{ 25.f };
+		float exp{ specularMap.Sample(vertex.uv).r * glossiness };
+		ColorRGB specular{ spec * Phong(1.f, exp, -m_pLightBuffer->direction, vertex.viewDirection, normal) };
+
+		//colorOut = diffuse + (diffuse + specular) * observedArea * m_pLightBuffer->intensity;
+
+		colorOut = ambient + specular + diffuse * observedArea * m_pLightBuffer->intensity;
+
+		//Update Color in Buffer
+		colorOut.MaxToOne();
+
+		return SDL_MapRGB(m_pBackBuffer->format,
+			static_cast<uint8_t>(colorOut.r * 255),
+			static_cast<uint8_t>(colorOut.g * 255),
+			static_cast<uint8_t>(colorOut.b * 255));
 	}
 
 	void SoftwareRasterizer::RenderTriangle(std::vector<Vertex_Out>& triangle) const
@@ -284,10 +340,10 @@ namespace dae
 							triangle[1].position,
 							triangle[2].position, crossArr) * interpelatedW };
 
-						ColorRGB currentColor{ interpelatedW * GetBarycentricInterpolation(
-							triangle[0].color,
-							triangle[1].color,
-							triangle[2].color, crossArr) };
+						//ColorRGB currentColor{ interpelatedW * GetBarycentricInterpolation(
+						//	triangle[0].color,
+						//	triangle[1].color,
+						//	triangle[2].color, crossArr) };
 
 						Vector3 currentNormal{ interpelatedW * GetBarycentricInterpolation(
 							triangle[0].normal,
@@ -307,7 +363,7 @@ namespace dae
 						Vertex_Out currentPixelData
 						{
 							currentPos,
-							currentColor,
+							//currentColor,
 							currentUv,
 							currentNormal.Normalized(),
 							currentTangent.Normalized(),
@@ -321,12 +377,12 @@ namespace dae
 		}
 	}
 
-	ColorRGB SoftwareRasterizer::Lambert(float kd, const ColorRGB& cd)
+	ColorRGB SoftwareRasterizer::Lambert(float kd, const ColorRGB& cd) const
 	{
 		return kd * cd / PI;
 	}
 
-	ColorRGB SoftwareRasterizer::Phong(float ks, float exp, const Vector3& l, const Vector3& v, const Vector3& n)
+	ColorRGB SoftwareRasterizer::Phong(float ks, float exp, const Vector3& l, const Vector3& v, const Vector3& n) const
 	{
 		Vector3 reflect{ Vector3::Reflect(l, n) };
 		float cosAlpha{ std::max(Vector3::Dot(v, reflect), 0.f) };

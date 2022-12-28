@@ -10,6 +10,7 @@ namespace dae
 	struct Vertex_Out;
 	struct Mesh;
 	enum class PrimitiveTopology;
+	struct Material;
 
 	class SoftwareRasterizer : public Renderer
 	{
@@ -65,13 +66,14 @@ namespace dae
 		 * \param cd Diffuse Color
 		 * \return Lambert Diffuse Color
 		 */
-		ColorRGB Lambert(float kd, const ColorRGB& cd);
-		ColorRGB Phong(float ks, float exp, const Vector3& l, const Vector3& v, const Vector3& n);
+		ColorRGB Lambert(float kd, const ColorRGB& cd) const;
+		ColorRGB Phong(float ks, float exp, const Vector3& l, const Vector3& v, const Vector3& n) const;
 
 		SDL_Surface* m_pFrontBuffer{ nullptr };
 		SDL_Surface* m_pBackBuffer{ nullptr };
 		uint32_t* m_pBackBufferPixels{};
 		float* m_pDepthBuffer{ nullptr };
 
+		static Material* m_pMaterialBuffer;
 	};
 }

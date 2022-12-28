@@ -1,8 +1,11 @@
 #pragma once
 #include "Renderer.h"
+#include "DataTypes.h"
 
 namespace dae
 {
+	class Effect;
+
 	class HardwareRasterizerDX11 : public Renderer
 	{
 	public:
@@ -22,8 +25,7 @@ namespace dae
 		virtual void Update(const Timer* pTimer) override;
 		virtual void Render(Scene* pScene) const override;
 
-
-
+		static ShaderID AddEffect(Effect* pEffect);
 		static ID3D11Device* GetDevice() { return s_pDevice; }
 
 	protected:
@@ -43,5 +45,7 @@ namespace dae
 		ID3D11RenderTargetView* m_pRenderTargetView{ nullptr };
 
 		FilterMode m_FilterMode{ FilterMode::Point };
+
+		static std::vector<std::unique_ptr<Effect>> s_pEffects;
 	};
 }

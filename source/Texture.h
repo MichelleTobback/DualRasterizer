@@ -14,13 +14,25 @@ namespace dae
 	class TextureSoftware
 	{
 	public:
+		TextureSoftware(SDL_Surface* pSurface);
 		~TextureSoftware();
+
+		TextureSoftware(TextureSoftware&& other) noexcept
+			: m_pSurface(std::move(other.m_pSurface))
+			, m_pSurfacePixels{ std::move(other.m_pSurfacePixels) }
+		{
+		}
+		TextureSoftware& operator=(TextureSoftware&& other)
+		{
+			m_pSurface = std::move(other.m_pSurface);
+			m_pSurfacePixels = std::move(other.m_pSurfacePixels);
+			return *this;
+		}
 
 		static TextureSoftware* LoadFromFile(const std::string& path);
 		ColorRGB Sample(const Vector2& uv) const;
 
 	private:
-		TextureSoftware(SDL_Surface* pSurface);
 
 		SDL_Surface* m_pSurface{ nullptr };
 		uint32_t* m_pSurfacePixels{ nullptr };
@@ -33,14 +45,26 @@ namespace dae
 	class TextureDX11 final
 	{
 	public:
+		TextureDX11(SDL_Surface* pSurface, ID3D11Device* pDevice);
 		~TextureDX11();
+
+		TextureDX11(TextureDX11&& other) 
+			: m_pResource(std::move(other.m_pResource))
+			, m_pSRV{ std::move(other.m_pSRV) }
+		{
+		}
+		TextureDX11& operator=(TextureDX11&& other)
+		{
+			m_pResource = std::move(other.m_pResource);
+			m_pSRV = std::move(other.m_pSRV);
+			return *this;
+		}
 
 		static TextureDX11* LoadFromFile(const std::string& path, ID3D11Device* pDevice);
 
 		inline ID3D11ShaderResourceView* GetSRV() const { return m_pSRV; }
 
 	private:
-		TextureDX11(SDL_Surface* pSurface, ID3D11Device* pDevice);
 
 		void Init(SDL_Surface* pSurface, ID3D11Device* pDevice);
 

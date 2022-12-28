@@ -1,13 +1,14 @@
 #include "pch.h"
 #include "HardwareRasterizerDX11.h"
 #include "Scene.h"
-#include "DataTypes.h"
 #include "Camera.h"
 #include "Effect.h"
+#include "ResourceManager.h"
 
 namespace dae
 {
 	ID3D11Device* HardwareRasterizerDX11::s_pDevice{nullptr};
+	std::vector<std::unique_ptr<Effect>> HardwareRasterizerDX11::s_pEffects{};
 
 	HardwareRasterizerDX11::HardwareRasterizerDX11(SDL_Window* pWindow)
 		: Renderer(pWindow)
@@ -64,6 +65,15 @@ namespace dae
 		m_pSwapChain->Present(0, 0);
 	}
 
+	ShaderID HardwareRasterizerDX11::AddEffect(Effect* pEffect)
+	{
+		std::unique_ptr<Effect> effect{ pEffect };
+		s_pEffects.push_back(std::move(effect));
+		s_pEffects.back().get()->CreateLayout(s_pDevice);
+
+		return static_cast<ShaderID>(s_pEffects.size() - 1);
+	}
+
 	void HardwareRasterizerDX11::RenderMesh(Mesh* pMesh, const Camera& camera) const
 	{
 		auto pMeshdx11{ dynamic_cast<MeshDX11*>(pMesh) };
@@ -72,15 +82,21 @@ namespace dae
 			return;
 
 		Matrix worldViewProjMat{ pMeshdx11->worldMatrix * camera.viewMatrix * camera.ProjectionMatrix };
-		pMeshdx11->m_pEffect->SetWorldViewProjMatrix(worldViewProjMat);
 
-		PosTexEffect* pEffect{ dynamic_cast<PosTexEffect*>(pMeshdx11->m_pEffect) };
+		auto& material{ ResourceManager::GetMaterial(pMesh->materialId) };
+		auto& pActiveEffect{ s_pEffects[material.shaderId] };
+
+		pActiveEffect->SetWorldViewProjMatrix(worldViewProjMat);
+
+		PosTexEffect* pEffect{ dynamic_cast<PosTexEffect*>(pActiveEffect.get()) };
 		if (pEffect)
 		{
-			//pEffect->SetTextureMap(pDiffuseTexture, "gDiffuseMap");
-			//pEffect->SetTextureMap(pNormalTexture, "gNormalMap");
-			//pEffect->SetTextureMap(pSpecularTexture, "gSpecularMap");
-			//pEffect->SetTextureMap(pGlossinessTexture, "gGlossinessMap");
+			assert(material.textures.size() == 4 && "material has not enough textures for current shading!\n");
+
+			pEffect->SetTextureMap(&ResourceManager::GetTextureDX11(material.textures[0]), "gDiffuseMap");
+			pEffect->SetTextureMap(&ResourceManager::GetTextureDX11(material.textures[1]), "gNormalMap");
+			pEffect->SetTextureMap(&ResourceManager::GetTextureDX11(material.textures[2]), "gSpecularMap");
+			pEffect->SetTextureMap(&ResourceManager::GetTextureDX11(material.textures[3]), "gGlossinessMap");
 
 			Matrix worldMat{ pMeshdx11->worldMatrix };
 			Matrix onbMat{ camera.invViewMatrix };
@@ -89,11 +105,12 @@ namespace dae
 		}
 		else
 		{
-			FlatEffect* pFlatEffect{ dynamic_cast<FlatEffect*>(pMeshdx11->m_pEffect) };
+			FlatEffect* pFlatEffect{ dynamic_cast<FlatEffect*>(pActiveEffect.get()) };
 
 			if (pFlatEffect)
 			{
-				//pFlatEffect->SetTextureMap(pDiffuseTexture);
+				assert(material.textures.size() == 0 && "material has not enough textures for current shading!\n");
+				pFlatEffect->SetTextureMap(&ResourceManager::GetTextureDX11(material.textures[0]));
 			}
 		}
 		//=============================================================//
@@ -104,7 +121,7 @@ namespace dae
 		//=============================================================//
 		//					  2. SetInput Layout					   //
 		//=============================================================//
-		m_pDeviceContext->IASetInputLayout(pMeshdx11->m_pEffect->GetInputLayout());
+		m_pDeviceContext->IASetInputLayout(pActiveEffect->GetInputLayout());
 
 		//=============================================================//
 		//					 3. Set VertexBuffer			           //
@@ -124,10 +141,10 @@ namespace dae
 
 		size_t techniqueIdx{ static_cast<size_t>(m_FilterMode) };
 		D3DX11_TECHNIQUE_DESC techDesc{};
-		pMeshdx11->m_pEffect->GetTechniqueByIndex(techniqueIdx)->GetDesc(&techDesc);
+		pActiveEffect->GetTechniqueByIndex(techniqueIdx)->GetDesc(&techDesc);
 		for (UINT p{}; p < techDesc.Passes; ++p)
 		{
-			pMeshdx11->m_pEffect->GetTechniqueByIndex(techniqueIdx)->GetPassByIndex(p)->Apply(0, m_pDeviceContext);
+			pActiveEffect->GetTechniqueByIndex(techniqueIdx)->GetPassByIndex(p)->Apply(0, m_pDeviceContext);
 			m_pDeviceContext->DrawIndexed(pMeshdx11->m_NumIndices, 0, 0);
 		}
 	}

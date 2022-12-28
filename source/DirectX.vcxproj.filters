@@ -44,6 +44,7 @@
     <ClInclude Include="Texture.h" />
     <ClInclude Include="Effect.h" />
     <ClInclude Include="Utils.h" />
+    <ClInclude Include="ResourceManager.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -80,6 +81,9 @@
       <Filter>Math</Filter>
     </ClCompile>
     <ClCompile Include="Mesh.cpp">
+      <Filter>Math</Filter>
+    </ClCompile>
+    <ClCompile Include="ResourceManager.cpp">
       <Filter>Math</Filter>
     </ClCompile>
   </ItemGroup>

@@ -8,6 +8,7 @@ namespace dae
 	class Scene;
 	struct Mesh;
 	struct Camera;
+	struct Light;
 
 	class Renderer
 	{
@@ -37,5 +38,8 @@ namespace dae
 		int m_Height{};
 
 		bool m_IsInitialized{ false };
+
+		static Light* m_pLightBuffer;
+		static Camera* m_pCameraBuffer;
 	};
 }

@@ -9,15 +9,9 @@
 
 namespace dae
 {
-
-	MeshDX11::MeshDX11(ID3D11Device* pDevice, Effect* pEffect)
-		: m_pEffect{ pEffect }
+	MeshDX11::MeshDX11(ID3D11Device* pDevice, MaterialID materialId)
 	{
-		if (!pEffect)
-		{
-			std::wcout << "Effect is nullptr!\n";
-			return;
-		}
+		this->materialId = materialId;
 	}
 
 	MeshDX11::~MeshDX11()
@@ -31,10 +25,10 @@ namespace dae
 		//=============================================================//
 		//				1. Create Vertex + input Layout				   //
 		//=============================================================//
-		HRESULT result{ m_pEffect->CreateLayout(pDevice) };
-
-		if (FAILED(result))
-			return;
+		//HRESULT result{ m_pEffect->CreateLayout(pDevice) };
+		//
+		//if (FAILED(result))
+		//	return;
 
 		//=============================================================//
 		//					3. Create VertexBuffer		               //
@@ -49,7 +43,7 @@ namespace dae
 		D3D11_SUBRESOURCE_DATA initData{};
 		initData.pSysMem = vertices.data();
 
-		result = pDevice->CreateBuffer(&bd, &initData, &m_pVertexBuffer);
+		HRESULT result{ pDevice->CreateBuffer(&bd, &initData, &m_pVertexBuffer) };
 
 		if (FAILED(result))
 			return;
@@ -71,14 +65,14 @@ namespace dae
 			return;
 	}
 
-	MeshDX11 MeshDX11::CreateFromFile(ID3D11Device* pDevice, const std::string& filename, Effect* pEffect)
+	MeshDX11* MeshDX11::CreateFromFile(ID3D11Device* pDevice, const std::string& filename, MaterialID materialId)
 	{
-		MeshDX11 mesh{ pDevice, pEffect };
+		MeshDX11* pMesh{ new MeshDX11(pDevice, materialId) };
 
-		Utils::ParseOBJ(filename, mesh.vertices, mesh.indices);
+		Utils::ParseOBJ(filename, pMesh->vertices, pMesh->indices);
 
-		mesh.Init(pDevice);
+		pMesh->Init(pDevice);
 
-		return mesh;
+		return pMesh;
 	}
 }
