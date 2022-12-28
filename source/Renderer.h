@@ -5,30 +5,37 @@ struct SDL_Surface;
 
 namespace dae
 {
-	class Renderer final
+	class Scene;
+	struct Mesh;
+	struct Camera;
+
+	class Renderer
 	{
 	public:
+		enum class RenderMode
+		{
+			Software = 0, Hardware = 1
+		};
+
 		Renderer(SDL_Window* pWindow);
-		~Renderer();
+		virtual ~Renderer();
 
 		Renderer(const Renderer&) = delete;
 		Renderer(Renderer&&) noexcept = delete;
 		Renderer& operator=(const Renderer&) = delete;
 		Renderer& operator=(Renderer&&) noexcept = delete;
 
-		void Update(const Timer* pTimer);
-		void Render() const;
+		virtual void Update(const Timer* pTimer) = 0;
+		virtual void Render(Scene* pScene) const = 0;
 
-	private:
+	protected:
+		virtual void RenderMesh(Mesh* pMesh, const Camera& camera) const = 0;
+
 		SDL_Window* m_pWindow{};
 
 		int m_Width{};
 		int m_Height{};
 
 		bool m_IsInitialized{ false };
-
-		//DIRECTX
-		HRESULT InitializeDirectX();
-		//...
 	};
 }
