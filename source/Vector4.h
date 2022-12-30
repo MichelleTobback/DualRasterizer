@@ -19,6 +19,7 @@ namespace dae
 		float SqrMagnitude() const;
 		float Normalize();
 		Vector4 Normalized() const;
+		static Vector4 Lerp(const Vector4& v1, const Vector4& v2, float t);
 
 		Vector2 GetXY() const;
 		Vector3 GetXYZ() const;

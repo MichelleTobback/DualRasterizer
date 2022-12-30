@@ -45,6 +45,7 @@
     <ClInclude Include="Effect.h" />
     <ClInclude Include="Utils.h" />
     <ClInclude Include="ResourceManager.h" />
+    <ClInclude Include="ColorRGBA.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />

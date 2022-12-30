@@ -1,5 +1,6 @@
 #pragma once
 #include "Renderer.h"
+#include <functional>
 
 struct SDL_Window;
 struct SDL_Surface;
@@ -50,15 +51,24 @@ namespace dae
 
 			return v0 * w0 + v1 * w1 + v2 * w2;
 		}
+		void PerspectiveDivide(std::vector<Vertex_Out>& triangle) const;
 		// used to minimize pixels overlap test
 		// triangle in screenspace
 		void GetBoundingBoxPixelsFromTriangle(const std::vector<Vertex_Out>& triangle, int& minX, int& minY, int& maxX, int& maxY) const;
 		void GetTriangleIndices(const Mesh& mesh, size_t triangleIndex, size_t& i0, size_t& i1, size_t& i2) const;
 		size_t GetIndexStep(PrimitiveTopology primitiveTopology) const;
-		bool IsTriangleInWindow(const Vector4& v0, const Vector4& v1, const Vector4& v2) const;
+		bool TriangleClipTest(const std::vector<Vertex_Out>& triangle) const;
+		void TriangleNearClipTest(std::vector<Vertex_Out>& triangle, 
+			std::function<void(std::vector<Vertex_Out>& triangle)> test1,
+			std::function<void(std::vector<Vertex_Out>& triangle)> test2) const;
+		void ProcessTriangle(std::vector<Vertex_Out>& triangle) const;
+		Vertex_Out LerpVertex(const Vertex_Out& triangle0, const Vertex_Out& triangle1, float t) const;
 
-		Uint32 PixelShading(const Vertex_Out& vertex) const;
 		void RenderTriangle(std::vector<Vertex_Out>& triangle) const;
+		Uint32 PixelShading(const Vertex_Out& vertex) const;
+
+		ColorRGB LambertPixelShader(const Vertex_Out& vertex) const;
+		ColorRGB FlatPixelShader(const Vertex_Out& vertex) const;
 
 		//shading
 		/**

@@ -18,6 +18,7 @@ namespace dae
 
 		static float Dot(const Vector2& v1, const Vector2& v2);
 		static float Cross(const Vector2& v1, const Vector2& v2);
+		static Vector2 Lerp(const Vector2& v1, const Vector2& v2, float t);
 
 		//Member Operators
 		Vector2 operator*(float scale) const;
@@ -32,6 +33,14 @@ namespace dae
 		Vector2& operator*=(float scale);
 		float& operator[](int index);
 		float operator[](int index) const;
+
+		inline friend bool operator==(const Vector2& lhs, const Vector2& rhs)
+		{
+			constexpr float epsilon{ 0.0001f };
+			return (std::abs(rhs.x - lhs.x) > epsilon &&
+				std::abs(rhs.y - lhs.y) > epsilon);
+		}
+		inline friend bool operator!=(const Vector2& lhs, const Vector2& rhs) { return !(lhs == rhs); }
 
 		static const Vector2 UnitX;
 		static const Vector2 UnitY;

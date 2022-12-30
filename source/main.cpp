@@ -55,6 +55,7 @@ int main(int argc, char* args[])
 	// Initialize "framework"
 	//=======================//
 	const auto pTimer = new Timer();
+	bool printFps{ true };
 
 	//Init renderer
 	constexpr const size_t numRenderers{ static_cast<size_t>(Renderer::RenderMode::Hardware) + 1 };
@@ -65,7 +66,7 @@ int main(int argc, char* args[])
 
 	//Init scene
 	Scene* pScene{ new ExamScene() };
-	pScene->Initialize();
+	pScene->Initialize(float(width), float(height));
 
 	//=======================//
 	// Start loop
@@ -75,6 +76,7 @@ int main(int argc, char* args[])
 	bool isLooping = true;
 	while (isLooping)
 	{
+		size_t activeRendererIdx{ static_cast<size_t>(activeRenderer) };
 		//--------- Get input events ---------
 		SDL_Event e;
 		while (SDL_PollEvent(&e))
@@ -93,16 +95,22 @@ int main(int argc, char* args[])
 				{
 					SwitchRenderMode(activeRenderer);
 				}
+				else if (e.key.keysym.scancode == SDL_SCANCODE_F11)
+				{
+					printFps = !printFps;
+				}
+				pScene->KeyDownEvent(e.key);
+				pRenderer[activeRendererIdx]->KeyDownEvent(e.key);
 			default: ;
 			}
 		}
 
 		//--------- Update ---------
 		pScene->Update(pTimer);
-		pRenderer[static_cast<size_t>(activeRenderer)]->Update(pTimer);
+		pRenderer[activeRendererIdx]->Update(pTimer);
 
 		//--------- Render ---------
-		pRenderer[static_cast<size_t>(activeRenderer)]->Render(pScene);
+		pRenderer[activeRendererIdx]->Render(pScene);
 
 		//--------- Timer ---------
 		pTimer->Update();
@@ -110,7 +118,8 @@ int main(int argc, char* args[])
 		if (printTimer >= 1.f)
 		{
 			printTimer = 0.f;
-			std::cout << "dFPS: " << pTimer->GetdFPS() << std::endl;
+			if (printFps)
+				std::cout << "dFPS: " << pTimer->GetdFPS() << std::endl;
 		}
 	}
 	pTimer->Stop();

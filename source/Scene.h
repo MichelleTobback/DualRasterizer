@@ -18,12 +18,13 @@ namespace dae
 		Scene& operator=(const Scene&) = delete;
 		Scene& operator=(Scene&&) noexcept = delete;
 
-		virtual void Initialize() = 0;
+		virtual void Initialize(float windowWidth, float windowHeight) = 0;
 		virtual void Update(dae::Timer* pTimer)
 		{
 			if (m_pCamera)
 				m_pCamera.get()->Update(pTimer);
 		}
+		virtual void KeyDownEvent(SDL_KeyboardEvent e) {}
 
 		void AddMesh(Mesh* mesh);
 
@@ -49,7 +50,11 @@ namespace dae
 		ExamScene& operator=(const ExamScene&) = delete;
 		ExamScene& operator=(ExamScene&&) noexcept = delete;
 
-		virtual void Initialize() override;
+		virtual void Initialize(float windowWidth, float windowHeight) override;
 		virtual void Update(dae::Timer* pTimer) override;
+		virtual void KeyDownEvent(SDL_KeyboardEvent e) override;
+
+	private:
+		bool m_Rotate{ true };
 	};
 }

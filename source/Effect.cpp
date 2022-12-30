@@ -201,9 +201,9 @@ void dae::PosTexEffect::SetTextureMap(TextureDX11* pTexture, const char* slot)
 dae::FlatEffect::FlatEffect(ID3D11Device* pDevice, const std::wstring& assetFile)
     : Effect(pDevice, assetFile)
 {
-    m_pTexture = m_pEffect->GetVariableByName("gDiffuse")->AsShaderResource();
+    m_pTexture = m_pEffect->GetVariableByName("gDiffuseMap")->AsShaderResource();
     if (!m_pTexture->IsValid())
-        std::wcout << L"gDiffuse is not valid!\n";
+        std::wcout << L"gDiffuseMap is not valid!\n";
 }
 
 dae::FlatEffect::~FlatEffect()

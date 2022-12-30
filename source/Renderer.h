@@ -28,6 +28,7 @@ namespace dae
 
 		virtual void Update(const Timer* pTimer) = 0;
 		virtual void Render(Scene* pScene) const = 0;
+		virtual void KeyDownEvent(SDL_KeyboardEvent e) {}
 
 	protected:
 		virtual void RenderMesh(Mesh* pMesh, const Camera& camera) const = 0;

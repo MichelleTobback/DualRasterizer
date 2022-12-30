@@ -74,6 +74,16 @@ namespace dae {
 		return v1 - (2.f * Vector3::Dot(v1, v2) * v2);
 	}
 
+	Vector3 Vector3::Lerp(const Vector3& v1, const Vector3& v2, float t)
+	{
+		return
+		{
+			std::lerp(v1.x, v2.x, t),
+			std::lerp(v1.y, v2.y, t),
+			std::lerp(v1.z, v2.z, t)
+		};
+	}
+
 	Vector4 Vector3::ToPoint4() const
 	{
 		return { x, y, z, 1 };

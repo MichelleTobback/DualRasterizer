@@ -81,6 +81,7 @@
   <ItemGroup>
     <ClInclude Include="Camera.h" />
     <ClInclude Include="ColorRGB.h" />
+    <ClInclude Include="ColorRGBA.h" />
     <ClInclude Include="DataTypes.h" />
     <ClInclude Include="Effect.h" />
     <ClInclude Include="HardwareRasterizerDX11.h" />

@@ -109,7 +109,7 @@ namespace dae
 
 			if (pFlatEffect)
 			{
-				assert(material.textures.size() == 0 && "material has not enough textures for current shading!\n");
+				assert(material.textures.size() == 1 && "material has not enough textures for current shading!\n");
 				pFlatEffect->SetTextureMap(&ResourceManager::GetTextureDX11(material.textures[0]));
 			}
 		}

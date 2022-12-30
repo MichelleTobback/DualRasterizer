@@ -31,6 +31,7 @@ namespace dae
 
 		static TextureSoftware* LoadFromFile(const std::string& path);
 		ColorRGB Sample(const Vector2& uv) const;
+		ColorRGBA SampleRGBA(const Vector2& uv) const;
 
 	private:
 

@@ -39,6 +39,17 @@ namespace dae
 		return { x / m, y / m, z / m, w / m };
 	}
 
+	Vector4 Vector4::Lerp(const Vector4& v1, const Vector4& v2, float t)
+	{
+		return
+		{
+			std::lerp(v1.x, v2.x, t),
+			std::lerp(v1.y, v2.y, t),
+			std::lerp(v1.z, v2.z, t),
+			std::lerp(v1.w, v2.w, t)
+		};
+	}
+
 	Vector2 Vector4::GetXY() const
 	{
 		return { x, y };

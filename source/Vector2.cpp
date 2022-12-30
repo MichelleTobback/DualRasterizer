@@ -48,6 +48,15 @@ namespace dae {
 		return v1.x * v2.y - v1.y * v2.x;
 	}
 
+	Vector2 Vector2::Lerp(const Vector2& v1, const Vector2& v2, float t)
+	{
+		return
+		{
+			std::lerp(v1.x, v2.x, t),
+			std::lerp(v1.y, v2.y, t)
+		};
+	}
+
 #pragma region Operator Overloads
 	Vector2 Vector2::operator*(float scale) const
 	{
