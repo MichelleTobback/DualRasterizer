@@ -5,6 +5,7 @@
 
 namespace dae
 {
+
 	struct Light
 	{
 		Vector3 direction{};
@@ -29,6 +30,75 @@ namespace dae
 		Vector3 tangent{};
 		Vector3 viewDirection{};
 		//Vector4 worldPos{};
+	};
+
+	struct Triangle
+	{
+		Vertex_Out v0{};
+		Vertex_Out v1{};
+		Vertex_Out v2{};
+
+		Vertex_Out& operator[](size_t index)
+		{
+			//assert((index <= 2 && index) >= 0 && "index out of range!\n");
+			switch (index)
+			{
+			case 0:
+				return v0;
+				break;
+
+			case 1:
+				return v1;
+				break;
+
+			case 2:
+				return v2;
+				break;
+			}
+			return v0; // no warning
+		}
+
+		const Vertex_Out& operator[](size_t index) const
+		{
+			//assert((index <= 2 && index) >= 0 && "index out of range!\n");
+			switch (index)
+			{
+			case 0:
+				return v0;
+				break;
+
+			case 1:
+				return v1;
+				break;
+
+			case 2:
+				return v2;
+				break;
+			}
+			return v0;
+		}
+
+		size_t size() { return size_t(3); }
+
+		class TriangleIterator
+		{
+		public:
+			explicit TriangleIterator(Vertex_Out* position = 0)
+				:i{position}{}
+
+			Vertex_Out& operator*() const { return *i; }
+			TriangleIterator& operator++() { ++i; return *this; }
+			bool operator!=(const TriangleIterator& other) const
+			{
+				return i != other.i;
+			}
+
+		private:
+			Vertex_Out* i;
+		};
+
+		//TriangleIterator begin() { return TriangleIterator{ &v0 }; }
+		//TriangleIterator end() { return TriangleIterator{ &v2 }; }
 	};
 
 	enum class PrimitiveTopology

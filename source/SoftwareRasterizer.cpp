@@ -6,6 +6,12 @@
 #include "ResourceManager.h"
 #include "Texture.h"
 
+#include <future>
+#include <ppl.h> // parallel_for
+
+//#define ASYNC
+#define PARALLEL_FOR
+
 namespace dae
 {
 	Material* SoftwareRasterizer::m_pMaterialBuffer{ nullptr };
@@ -82,50 +88,103 @@ namespace dae
 		VertexTransformationFunction(*pMesh, camera);
 
 		size_t step{ GetIndexStep(pMesh->primitiveTopology) };
-		size_t triangleIdx{};
 
+#if defined(ASYNC)
+		static std::mutex renderMutex;
+		const uint32_t numCores{ std::thread::hardware_concurrency() };
+		std::vector<std::future<void>> async_futures{};
+		const uint32_t numTriangles{ static_cast<uint32_t>(pMesh->indices.size() / step) };
+		const uint32_t numTrianglesPerTask{ numTriangles / numCores };
+		uint32_t numUnassignedTriangles{ numTriangles % numCores };
+		size_t currentTriangleIndex{0};
+
+		for (uint32_t coreId{ 0 }; coreId < numCores; ++coreId)
+		{
+			uint32_t taskSize{ numTrianglesPerTask };
+			if (numUnassignedTriangles > 0)
+			{
+				++taskSize;
+				--numUnassignedTriangles;
+			}
+
+			async_futures.push_back(std::async(std::launch::async, [=, this]()->void
+				{
+					std::lock_guard<std::mutex> lock(renderMutex);
+					const size_t triangleIndexEnd{ currentTriangleIndex + taskSize };
+					for (size_t triangleIndex{ currentTriangleIndex }; triangleIndex < triangleIndexEnd; ++triangleIndex)
+					{
+						ProcessTriangle(triangleIndex, pMesh);
+					}
+				}));
+			currentTriangleIndex += taskSize;
+		}
+//#elif defined(PARALLEL_FOR)
+		static std::mutex renderMutex;
+		const uint32_t numTriangles{ static_cast<uint32_t>(pMesh->indices.size() / step) };
+		concurrency::parallel_for(0u, numTriangles, [=, this](int i)->void
+			{
+				std::lock_guard<std::mutex> lock(renderMutex);
+				ProcessTriangle(i, pMesh);
+			});
+
+#else
+		size_t triangleIdx{};
 		for (size_t i{}; i + 3 <= pMesh->indices.size(); i += step)
 		{
-			size_t i0{}, i1{}, i2{};
-			GetTriangleIndices(*pMesh, triangleIdx, i0, i1, i2);
-
-			std::vector<Vertex_Out> currentTriangleVerts{ pMesh->vertices_out[i0], pMesh->vertices_out[i1], pMesh->vertices_out[i2] };
-
-			ProcessTriangle(currentTriangleVerts);
+			ProcessTriangle(triangleIdx, pMesh);
 			++triangleIdx;
 		}
+
+#endif
 	}
 
 	void SoftwareRasterizer::VertexTransformationFunction(Mesh& mesh, const Camera& camera) const
 	{
 		mesh.vertices_out.clear();
+		mesh.vertices_out.resize(mesh.vertices.size());
 		Matrix worldViewProjectionMatrix{ mesh.worldMatrix * camera.viewMatrix * camera.ProjectionMatrix };
 
-		for (Vertex& vertex : mesh.vertices)
+		uint32_t numVerts{ static_cast<uint32_t>(mesh.vertices.size()) };
+		//static std::mutex renderMutex;
+#if defined(PARALLEL_FOR)
+		concurrency::parallel_for(0u, numVerts, [&](int i)->void
+			{
+				//std::lock_guard<std::mutex> lock(renderMutex);
+				VertexShading(i, mesh.vertices[i], mesh, worldViewProjectionMatrix, camera);
+			});
+#else
+
+		for (size_t i{}; i < numVerts; i++)
 		{
-			Vertex_Out transformedVertex{};
-
-			//to viewspace
-			Vector4 vertexPos{ vertex.position.x, vertex.position.y, vertex.position.z, 1.f };
-			transformedVertex.position = worldViewProjectionMatrix.TransformPoint(vertexPos);
-
-			//parse unchanged data
-			transformedVertex.uv = vertex.uv;
-			//transformedVertex.color = vertex.color;
-
-			// to viewspace
-			transformedVertex.normal = mesh.worldMatrix.TransformVector(vertex.normal);
-			transformedVertex.normal.Normalize();
-
-			transformedVertex.tangent = mesh.worldMatrix.TransformVector(vertex.tangent);
-			transformedVertex.tangent.Normalize();
-
-			transformedVertex.viewDirection = (mesh.worldMatrix.TransformPoint(vertex.position)) - camera.origin;
-			transformedVertex.viewDirection.Normalize();
-			//transformedVertex.worldPos = (mesh.worldMatrix.TransformPoint(vertexPos));
-
-			mesh.vertices_out.push_back(transformedVertex);
+			VertexShading(i, vertex, mesh, worldViewProjectionMatrix, camera);
 		}
+#endif
+	}
+
+	void SoftwareRasterizer::VertexShading(size_t i, const Vertex& vertex, Mesh& mesh, const Matrix& worldViewProjectionMatrix, const Camera& camera) const
+	{
+		Vertex_Out transformedVertex{};
+
+		//to viewspace
+		Vector4 vertexPos{ vertex.position.x, vertex.position.y, vertex.position.z, 1.f };
+		transformedVertex.position = worldViewProjectionMatrix.TransformPoint(vertexPos);
+
+		//parse unchanged data
+		transformedVertex.uv = vertex.uv;
+		//transformedVertex.color = vertex.color;
+
+		// to viewspace
+		transformedVertex.normal = mesh.worldMatrix.TransformVector(vertex.normal);
+		transformedVertex.normal.Normalize();
+
+		transformedVertex.tangent = mesh.worldMatrix.TransformVector(vertex.tangent);
+		transformedVertex.tangent.Normalize();
+
+		transformedVertex.viewDirection = (mesh.worldMatrix.TransformPoint(vertex.position)) - camera.origin;
+		transformedVertex.viewDirection.Normalize();
+		//transformedVertex.worldPos = (mesh.worldMatrix.TransformPoint(vertexPos));
+
+		mesh.vertices_out[i] = transformedVertex;
 	}
 
 	Vector2 SoftwareRasterizer::VertexToScreenSpace(const Vector4& vertex) const
@@ -137,7 +196,7 @@ namespace dae
 		};
 	}
 
-	bool SoftwareRasterizer::IsPixelInTriangle(const std::vector<Vertex_Out>& verts, const Vector2& pixel, float* crossArr) const
+	bool SoftwareRasterizer::IsPixelInTriangle(const Triangle& verts, const Vector2& pixel, float* crossArr) const
 	{
 		Vector2 v0{ VertexToScreenSpace(verts[0].position) };
 		Vector2 v1{ VertexToScreenSpace(verts[1].position) };
@@ -164,17 +223,24 @@ namespace dae
 		return true;
 	}
 
-	void SoftwareRasterizer::PerspectiveDivide(std::vector<Vertex_Out>& triangle) const
+	void SoftwareRasterizer::PerspectiveDivide(Triangle& triangle) const
 	{
-		for (auto& vertex : triangle)
+		for (size_t i{}; i < triangle.size(); i++)
 		{
-			vertex.position.x /= vertex.position.w;
-			vertex.position.y /= vertex.position.w;
-			vertex.position.z /= vertex.position.w;
+			triangle[i].position.x /= triangle[i].position.w;
+			triangle[i].position.y /= triangle[i].position.w;
+			triangle[i].position.z /= triangle[i].position.w;
 		}
+
+		//for (auto& vertex : triangle)
+		//{
+		//	vertex.position.x /= vertex.position.w;
+		//	vertex.position.y /= vertex.position.w;
+		//	vertex.position.z /= vertex.position.w;
+		//}
 	}
 
-	void SoftwareRasterizer::GetBoundingBoxPixelsFromTriangle(const std::vector<Vertex_Out>& triangle, int& minX, int& minY, int& maxX, int& maxY) const
+	void SoftwareRasterizer::GetBoundingBoxPixelsFromTriangle(const Triangle& triangle, int& minX, int& minY, int& maxX, int& maxY) const
 	{
 		Vector2 v0{ VertexToScreenSpace(triangle[0].position) };
 		Vector2 v1{ VertexToScreenSpace(triangle[1].position) };
@@ -249,12 +315,17 @@ namespace dae
 		return step;
 	}
 
-	void SoftwareRasterizer::ProcessTriangle(std::vector<Vertex_Out>& triangle) const
+	void SoftwareRasterizer::ProcessTriangle(size_t triangleIndex, Mesh* pMesh) const
 	{
+		size_t i0{}, i1{}, i2{};
+		GetTriangleIndices(*pMesh, triangleIndex, i0, i1, i2);
+
+		Triangle triangle{ pMesh->vertices_out[i0], pMesh->vertices_out[i1], pMesh->vertices_out[i2] };
+
 		if (!TriangleClipTest(triangle))
 			return;
 
-		const auto clip1VertOutside{ [this](std::vector<Vertex_Out>& triangle) -> void
+		const auto clip1VertOutside{ [this](Triangle& triangle) -> void
 			{
 				const float t0{ (-triangle[0].position.z) / (triangle[1].position.z - triangle[0].position.z)};
 				const float t1{ (-triangle[0].position.z) / (triangle[2].position.z - triangle[0].position.z)};
@@ -266,7 +337,7 @@ namespace dae
 				triangle[0] = v0Lerped1;
 				RenderTriangle(triangle);
 			} };
-		const auto clip2VertsOutside{ [this](std::vector<Vertex_Out>& triangle) -> void
+		const auto clip2VertsOutside{ [this](Triangle& triangle) -> void
 			{
 				const float t0{ (-triangle[0].position.z) / (triangle[2].position.z - triangle[0].position.z)};
 				const float t1{ (-triangle[1].position.z) / (triangle[2].position.z - triangle[1].position.z)};
@@ -280,7 +351,7 @@ namespace dae
 		TriangleNearClipTest(triangle, clip1VertOutside, clip2VertsOutside);
 	}
 
-	bool SoftwareRasterizer::TriangleClipTest(const std::vector<Vertex_Out>& triangle) const
+	bool SoftwareRasterizer::TriangleClipTest(const Triangle& triangle) const
 	{
 		// clipping tests
 		if (triangle[0].position.x > triangle[0].position.w &&
@@ -316,9 +387,9 @@ namespace dae
 		return true;
 	}
 
-	void SoftwareRasterizer::TriangleNearClipTest(std::vector<Vertex_Out>& triangle, 
-		std::function<void(std::vector<Vertex_Out>& triangle)> case1,
-		std::function<void(std::vector<Vertex_Out>& triangle)> case2) const
+	void SoftwareRasterizer::TriangleNearClipTest(Triangle& triangle, 
+		std::function<void(Triangle& triangle)> case1,
+		std::function<void(Triangle& triangle)> case2) const
 	{
 		if (triangle[0].position.z < 0.f)
 		{
@@ -469,7 +540,7 @@ namespace dae
 		return colorOut;
 	}
 
-	void SoftwareRasterizer::RenderTriangle(std::vector<Vertex_Out>& triangle) const
+	void SoftwareRasterizer::RenderTriangle(Triangle& triangle) const
 	{
 		PerspectiveDivide(triangle);
 
