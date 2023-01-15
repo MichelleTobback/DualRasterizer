@@ -38,6 +38,15 @@ namespace dae
 		Vertex_Out v1{};
 		Vertex_Out v2{};
 
+		Triangle() = default;
+		Triangle(const Triangle& other)
+			: v0{other.v0}, v1{other.v1}, v2{other.v2}{}
+		Triangle(const Vertex_Out& _v0, const Vertex_Out& _v1, const Vertex_Out& _v2)
+			: v0{_v0}, v1{_v1}, v2{_v2}{}
+		Triangle(Triangle&& other) = default;
+		Triangle operator=(const Triangle& other) { return *this; }
+		Triangle& operator=(Triangle&& other) { return *this; }
+
 		Vertex_Out& operator[](size_t index)
 		{
 			//assert((index <= 2 && index) >= 0 && "index out of range!\n");

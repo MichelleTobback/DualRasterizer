@@ -15,6 +15,7 @@
 namespace dae
 {
 	Material* SoftwareRasterizer::m_pMaterialBuffer{ nullptr };
+	Matrix* SoftwareRasterizer::m_pTBNBuffer{nullptr};
 
 	struct RenderStats
 	{
@@ -61,7 +62,7 @@ namespace dae
 		//temp-------//
 		Light light{};
 		light.direction = { 0.577f, -0.577f, 0.577f };
-		light.direction.Normalize();
+		//light.direction.Normalize();
 		light.intensity = 7.f;
 
 		m_pLightBuffer = &light;
@@ -175,13 +176,13 @@ namespace dae
 
 		// to viewspace
 		transformedVertex.normal = mesh.worldMatrix.TransformVector(vertex.normal);
-		transformedVertex.normal.Normalize();
+		//transformedVertex.normal.Normalize();
 
 		transformedVertex.tangent = mesh.worldMatrix.TransformVector(vertex.tangent);
-		transformedVertex.tangent.Normalize();
+		//transformedVertex.tangent.Normalize();
 
 		transformedVertex.viewDirection = (mesh.worldMatrix.TransformPoint(vertex.position)) - camera.origin;
-		transformedVertex.viewDirection.Normalize();
+		//transformedVertex.viewDirection.Normalize();
 		//transformedVertex.worldPos = (mesh.worldMatrix.TransformPoint(vertexPos));
 
 		mesh.vertices_out[i] = transformedVertex;
@@ -217,10 +218,7 @@ namespace dae
 		Vector2 edge{ v1 - v0 };
 		Vector2 vertToPixel{ pixel - v0 };
 		cross = Vector2::Cross(vertToPixel, edge);
-		if (cross > 0.f)
-			return false;
-
-		return true;
+		return cross <= 0.f;
 	}
 
 	void SoftwareRasterizer::PerspectiveDivide(Triangle& triangle) const
@@ -251,17 +249,17 @@ namespace dae
 		maxX = minX;
 		maxY = minY;
 
-		minX = std::min(minX, int(v1.x));
-		minY = std::min(minY, int(v1.y));
+		minX = Min(minX, int(v1.x));
+		minY = Min(minY, int(v1.y));
 
-		maxX = std::max(maxX, int(v1.x));
-		maxY = std::max(maxY, int(v1.y));
+		maxX = Max(maxX, int(v1.x));
+		maxY = Max(maxY, int(v1.y));
 
-		minX = std::min(minX, int(v2.x));
-		minY = std::min(minY, int(v2.y));
+		minX = Min(minX, int(v2.x));
+		minY = Min(minY, int(v2.y));
 
-		maxX = std::max(maxX, int(v2.x));
-		maxY = std::max(maxY, int(v2.y));
+		maxX = Max(maxX, int(v2.x));
+		maxY = Max(maxY, int(v2.y));
 
 		minX = Clamp(minX - 1, 0, m_Width - 1);
 		minY = Clamp(minY - 1, 0, m_Height - 1);
@@ -490,7 +488,7 @@ namespace dae
 	{
 		//Vector3 viewDir{ (vertex.worldPos.GetXYZ() - m_pCameraBuffer->invViewMatrix[3].GetXYZ())};
 		Vector3 viewDir{ (vertex.viewDirection) };
-		viewDir.Normalize();
+		//viewDir.Normalize();
 
 		//get textures
 		auto& diffuseMap{ ResourceManager::GetTexture(m_pMaterialBuffer->textures[0]) };
@@ -507,10 +505,11 @@ namespace dae
 
 		const ColorRGB normalColor{ (2 * normalMap.Sample(vertex.uv)) - ColorRGB{1,1,1} };
 		const Vector3 normalSample{ normalColor.r,normalColor.g,normalColor.b };
-		normal = tbn.TransformVector(normalSample).Normalized();
+		normal = tbn.TransformVector(normalSample);
+		normal.Normalize();
 
 		//shading
-		float observedArea{ std::max(Vector3::Dot(normal, -m_pLightBuffer->direction), 0.f) };
+		float observedArea{ Max(Vector3::Dot(normal, -m_pLightBuffer->direction), 0.f) };
 
 		ColorRGB baseColor{ diffuseMap.Sample(vertex.uv) };
 		ColorRGB ambient{ 0.025f, 0.025f, 0.025f };
@@ -606,13 +605,17 @@ namespace dae
 						//	triangle[1].worldPos,
 						//	triangle[2].worldPos, crossArr) * interpelatedW };
 
+						currentNormal.Normalize();
+						currentTangent.Normalize();
+						viewDirection.Normalize();
+
 						Vertex_Out currentPixelData
 						{
 							currentPos,
 							//currentColor,
 							currentUv,
-							currentNormal.Normalized(),
-							currentTangent.Normalized(),
+							currentNormal,
+							currentTangent,
 							viewDirection
 							//currentWorldPos
 						};
@@ -632,7 +635,7 @@ namespace dae
 	ColorRGB SoftwareRasterizer::Phong(float ks, float exp, const Vector3& l, const Vector3& v, const Vector3& n) const
 	{
 		Vector3 reflect{ Vector3::Reflect(l, n) };
-		float cosAlpha{ std::max(Vector3::Dot(v, reflect), 0.f) };
+		float cosAlpha{ Max(Vector3::Dot(v, reflect), 0.f) };
 
 		float specular{ (cosAlpha > 0.f) ? ks * powf(cosAlpha, exp) : 0.f };
 		return ColorRGB{ specular, specular, specular };

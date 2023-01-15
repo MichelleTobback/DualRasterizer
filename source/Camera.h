@@ -38,12 +38,11 @@ namespace dae
 		float nearClip{ 0.1f };
 		float farClip{ 100.f };
 
-		void Initialize(float _fovAngle = 90.f, Vector3 _origin = { 0.f,0.f,0.f })
+		void Initialize(float _fovAngle = 90.f, Vector3 _origin = { 0.f,0.f,0.f }, float _aspectRatio = 1.f)
 		{
-			fovAngle = _fovAngle;
-			fov = tanf((fovAngle * TO_RADIANS) / 2.f);
-
 			origin = _origin;
+			aspectRatio = _aspectRatio;
+			SetFOV(_fovAngle);
 
 			CalculateViewMatrix();
 		}
@@ -131,14 +130,14 @@ namespace dae
 				}
 			}
 
-			if (totalPitch >= PI_2)
-				totalPitch = 0.f;
-			if (totalPitch < 0.f)
-				totalPitch = PI_2;
-			if (totalYaw >= PI_2)
-				totalYaw = 0.f;
-			if (totalYaw < 0.f)
-				totalYaw = PI_2;
+			//if (totalPitch >= PI_2)
+			//	totalPitch = 0.f;
+			//if (totalPitch < 0.f)
+			//	totalPitch = PI_2;
+			//if (totalYaw >= PI_2)
+			//	totalYaw = 0.f;
+			//if (totalYaw < 0.f)
+			//	totalYaw = PI_2;
 
 			if (hasRotated)
 			{
@@ -154,7 +153,14 @@ namespace dae
 			{
 				CalculateViewMatrix();
 			}
-			CalculateProjectionMatrix(); //Try to optimize this - should only be called once or when fov/aspectRatio changes
+			//CalculateProjectionMatrix(); //Try to optimize this - should only be called once or when fov/aspectRatio changes
+		}
+
+		inline void SetFOV(float angle)
+		{
+			fovAngle = angle;
+			fov = tanf((fovAngle * TO_RADIANS) / 2.f);
+			CalculateProjectionMatrix();
 		}
 	};
 }

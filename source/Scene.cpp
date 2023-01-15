@@ -44,10 +44,9 @@ namespace dae
 	{
 		//setup camera
 		m_pCamera = std::make_unique<Camera>();
-		m_pCamera->Initialize(45.f, { 0.f, 0.f, 0.f });
+		m_pCamera->Initialize(45.f, { 0.f, 0.f, 0.f }, windowWidth / windowHeight);
 		m_pCamera->nearClip = 0.1f;
 		m_pCamera->farClip = 100.f;
-		m_pCamera->aspectRatio = windowWidth / windowHeight;
 		
 		const auto& pDevice{ HardwareRasterizerDX11::GetDevice() };
 

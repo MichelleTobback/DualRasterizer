@@ -89,5 +89,6 @@ namespace dae
 		float* m_pDepthBuffer{ nullptr };
 
 		static Material* m_pMaterialBuffer;
+		static Matrix* m_pTBNBuffer;
 	};
 }
