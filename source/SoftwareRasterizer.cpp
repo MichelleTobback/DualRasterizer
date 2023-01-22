@@ -8,11 +8,6 @@
 #include "ConsoleLog.h"
 
 #include <array>
-#include <future>
-#include <ppl.h> // parallel_for
-
-//#define ASYNC
-//#define PARALLEL_FOR
 
 namespace dae
 {
@@ -175,46 +170,6 @@ namespace dae
 		VertexTransformationFunction(*pMesh, camera);
 
 		size_t step{ GetIndexStep(pMesh->primitiveTopology) };
-
-#if defined(ASYNC)
-		static std::mutex renderMutex;
-		const uint32_t numCores{ std::thread::hardware_concurrency() };
-		std::vector<std::future<void>> async_futures{};
-		const uint32_t numTriangles{ static_cast<uint32_t>(pMesh->indices.size() / step) };
-		const uint32_t numTrianglesPerTask{ numTriangles / numCores };
-		uint32_t numUnassignedTriangles{ numTriangles % numCores };
-		size_t currentTriangleIndex{0};
-
-		for (uint32_t coreId{ 0 }; coreId < numCores; ++coreId)
-		{
-			uint32_t taskSize{ numTrianglesPerTask };
-			if (numUnassignedTriangles > 0)
-			{
-				++taskSize;
-				--numUnassignedTriangles;
-			}
-
-			async_futures.push_back(std::async(std::launch::async, [=, this]()->void
-				{
-					std::lock_guard<std::mutex> lock(renderMutex);
-					const size_t triangleIndexEnd{ currentTriangleIndex + taskSize };
-					for (size_t triangleIndex{ currentTriangleIndex }; triangleIndex < triangleIndexEnd; ++triangleIndex)
-					{
-						ProcessTriangle(triangleIndex, pMesh);
-					}
-				}));
-			currentTriangleIndex += taskSize;
-		}
-#elif defined(PARALLEL_FOR)
-		static std::mutex renderMutex;
-		const uint32_t numTriangles{ static_cast<uint32_t>(pMesh->indices.size() / step) };
-		concurrency::parallel_for(0u, numTriangles, [=, this](int i)->void
-			{
-				std::lock_guard<std::mutex> lock(renderMutex);
-				ProcessTriangle(i, pMesh);
-			});
-
-#else
 		size_t triangleIdx{};
 		const size_t maxIndices{ pMesh->indices.size() };
 		for (size_t i{}; i + 3 <= maxIndices; i += step)
@@ -222,8 +177,6 @@ namespace dae
 			ProcessTriangle(triangleIdx, pMesh);
 			++triangleIdx;
 		}
-
-#endif
 	}
 
 	void SoftwareRasterizer::VertexTransformationFunction(Mesh& mesh, const Camera& camera) const
