@@ -6,7 +6,7 @@ dae::Effect::Effect(ID3D11Device* pDevice, const std::wstring& assetFile)
 {
     m_pEffect = LoadEffect(pDevice, assetFile);
 
-    if (m_pEffect == nullptr)
+    if (m_pEffect == nullptr || !m_pEffect->IsValid())
         return;
 
     m_pTechniques.push_back(m_pEffect->GetTechniqueByName("DefaultTechnique"));
@@ -132,6 +132,10 @@ dae::PosTexEffect::PosTexEffect(ID3D11Device* pDevice, const std::wstring& asset
     m_pONBMatrixVar = m_pEffect->GetVariableByName("gONB")->AsMatrix();
     if (!m_pONBMatrixVar->IsValid())
         std::wcout << L"m_pONBMatrixVar not valid!\n";
+
+    m_pFaceCullModeVar = m_pEffect->GetVariableByName("gRasterizerState")->AsRasterizer();
+    if (!m_pFaceCullModeVar->IsValid())
+        std::wcout << L"gRasterizerState not valid!\n";
 }
 
 dae::PosTexEffect::~PosTexEffect()
@@ -183,6 +187,11 @@ void dae::PosTexEffect::SetWorldMatrix(Matrix& matrix)
 {
     const float* data{ reinterpret_cast<float*>(&matrix) };
     m_pWorldMatrixVar->SetMatrix(data);
+}
+
+void dae::PosTexEffect::SetRasterizerState(ID3D11RasterizerState* pRasterizerState)
+{
+    m_pFaceCullModeVar->SetRasterizerState(0, pRasterizerState);
 }
 
 void dae::PosTexEffect::CreateTextureVar(const char* varName)

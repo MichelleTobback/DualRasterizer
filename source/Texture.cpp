@@ -35,14 +35,15 @@ namespace dae
 		Vector2 tilesUv{ uv };
 
 		//tiling
-		while (tilesUv.x > 1.f)
-			tilesUv.x = 1.f - tilesUv.x;
-		while (tilesUv.x < 0)
-			tilesUv.x = 1.f + tilesUv.x;
-		while (tilesUv.y > 1.f)
-			tilesUv.y = 1.f - tilesUv.y;
-		while (tilesUv.y < 0)
-			tilesUv.y = 1.f + tilesUv.y;
+		//clamp to edge
+		if (tilesUv.x < 0.f)
+			tilesUv.x = 0.f;
+		else if (tilesUv.x > 1.f)
+			tilesUv.x = 1.f;
+		if (tilesUv.y < 0.f)
+			tilesUv.y = 0.f;
+		else if (tilesUv.y > 1.f)
+			tilesUv.y = 1.f;
 
 		SDL_assert(m_pSurface && "m_pSurface is nullptr!");
 
@@ -53,7 +54,8 @@ namespace dae
 
 		SDL_GetRGB(pixel, m_pSurface->format, &r, &g, &b);
 
-		return { r / 255.f, g / 255.f, b / 255.f };
+		constexpr const float colorDivider{ 1.f / 255.f };
+		return { r * colorDivider, g * colorDivider, b * colorDivider };
 	}
 
 	ColorRGBA TextureSoftware::SampleRGBA(const Vector2& uv) const
@@ -61,14 +63,15 @@ namespace dae
 		Uint8 r{}, g{}, b{}, a{};
 		Vector2 tilesUv{ uv };
 		//tiling
-		while (tilesUv.x > 1.f)
-			tilesUv.x = 1.f - tilesUv.x;
-		while (tilesUv.x < 0)
-			tilesUv.x = 1.f + tilesUv.x;
-		while (tilesUv.y > 1.f)
-			tilesUv.y = 1.f - tilesUv.y;
-		while (tilesUv.y < 0)
-			tilesUv.y = 1.f + tilesUv.y;
+		//clamp to edge
+		if (tilesUv.x < 0.f)
+			tilesUv.x = 0.f;
+		else if (tilesUv.x > 1.f)
+			tilesUv.x = 1.f;
+		if (tilesUv.y < 0.f)
+			tilesUv.y = 0.f;
+		else if (tilesUv.y > 1.f)
+			tilesUv.y = 1.f;
 
 		//sample
 
@@ -78,7 +81,9 @@ namespace dae
 
 		SDL_GetRGBA(pixel, m_pSurface->format, &r, &g, &b, &a);
 
-		return { r / 255.f, g / 255.f, b / 255.f, a / 255.f };
+		constexpr const float divider{ 1.f / 255.f };
+
+		return { r * divider, g * divider, b * divider, a * divider };
 	}
 
 	//=======================//

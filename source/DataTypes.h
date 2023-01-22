@@ -15,7 +15,6 @@ namespace dae
 	struct Vertex
 	{
 		Vector3 position{};
-		//ColorRGB color{ colors::White };
 		Vector2 uv{}; 
 		Vector3 normal{}; 
 		Vector3 tangent{}; 
@@ -24,12 +23,10 @@ namespace dae
 	struct Vertex_Out
 	{
 		Vector4 position{};
-		//ColorRGB color{ colors::White };
 		Vector2 uv{};
 		Vector3 normal{};
 		Vector3 tangent{};
 		Vector3 viewDirection{};
-		//Vector4 worldPos{};
 	};
 
 	struct Triangle
@@ -38,6 +35,8 @@ namespace dae
 		Vertex_Out v1{};
 		Vertex_Out v2{};
 
+		const size_t size{ 3 };
+
 		Triangle() = default;
 		Triangle(const Triangle& other)
 			: v0{other.v0}, v1{other.v1}, v2{other.v2}{}
@@ -45,7 +44,9 @@ namespace dae
 			: v0{_v0}, v1{_v1}, v2{_v2}{}
 		Triangle(Triangle&& other) = default;
 		Triangle operator=(const Triangle& other) { return *this; }
-		Triangle& operator=(Triangle&& other) { return *this; }
+		Triangle& operator=(Triangle&& other) noexcept { return *this; }
+
+		size_t Size() const { return size; }
 
 		Vertex_Out& operator[](size_t index)
 		{
@@ -86,28 +87,6 @@ namespace dae
 			}
 			return v0;
 		}
-
-		size_t size() { return size_t(3); }
-
-		class TriangleIterator
-		{
-		public:
-			explicit TriangleIterator(Vertex_Out* position = 0)
-				:i{position}{}
-
-			Vertex_Out& operator*() const { return *i; }
-			TriangleIterator& operator++() { ++i; return *this; }
-			bool operator!=(const TriangleIterator& other) const
-			{
-				return i != other.i;
-			}
-
-		private:
-			Vertex_Out* i;
-		};
-
-		//TriangleIterator begin() { return TriangleIterator{ &v0 }; }
-		//TriangleIterator end() { return TriangleIterator{ &v2 }; }
 	};
 
 	enum class PrimitiveTopology
@@ -126,6 +105,8 @@ namespace dae
 		ShaderID shaderId; //effect for dx11
 
 		std::vector<TextureID> textures;
+
+		bool depthWrite{ true };
 	};
 
 	struct Mesh
@@ -140,6 +121,8 @@ namespace dae
 		Matrix worldMatrix{};
 
 		MaterialID materialId{};
+
+		bool render{ true };
 
 		inline void RotateY(float angle)
 		{

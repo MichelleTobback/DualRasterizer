@@ -4,25 +4,32 @@
 #include "Camera.h"
 #include "Effect.h"
 #include "ResourceManager.h"
+#include "ConsoleLog.h"
 
 namespace dae
 {
+	using namespace Log;
+
 	ID3D11Device* HardwareRasterizerDX11::s_pDevice{nullptr};
 	std::vector<std::unique_ptr<Effect>> HardwareRasterizerDX11::s_pEffects{};
 
 	HardwareRasterizerDX11::HardwareRasterizerDX11(SDL_Window* pWindow)
 		: Renderer(pWindow)
 	{
+		m_ClearColor = ColorRGB{ 0.39f, 0.59f, 0.93f };
+
 		//Initialize DirectX pipeline
 		const HRESULT result = InitializeDirectX();
 		if (result == S_OK)
 		{
 			m_IsInitialized = true;
-			std::cout << "DirectX is initialized and ready!\n";
+			TSTRING msg{ _T("\nDirectX is initialized and ready!\n") };
+			PrintMessage(msg, MSG_LOGGER_HARDWARERASTERIZER, MSG_COLOR_HARDWARERASTERIZER, MSG_COLOR_SUCCESS);
 		}
 		else
 		{
-			std::cout << "DirectX initialization failed!\n";
+			TSTRING msg{ _T("\nDirectX initialization failed!\n") };
+			PrintMessage(msg, MSG_LOGGER_HARDWARERASTERIZER, MSG_COLOR_HARDWARERASTERIZER, MSG_COLOR_WARNING);
 		}
 	}
 
@@ -45,7 +52,7 @@ namespace dae
 		//					1. Clear RTV & DSV			               //
 		//=============================================================//
 
-		ColorRGB clearColor = ColorRGB{ 0.15f, 0.15f, 0.15f };
+		const ColorRGB& clearColor{ GetClearColor() };
 		m_pDeviceContext->ClearRenderTargetView(m_pRenderTargetView, &clearColor.r);
 		m_pDeviceContext->ClearDepthStencilView(m_pDepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.f, 0);
 
@@ -55,6 +62,9 @@ namespace dae
 
 		for (const auto& pMesh : pScene->m_pMeshes)
 		{
+			if (!pMesh->render)
+				continue;
+
 			RenderMesh(pMesh.get(), pScene->GetCamera());
 		}
 
@@ -63,6 +73,20 @@ namespace dae
 		//=============================================================//
 
 		m_pSwapChain->Present(0, 0);
+	}
+
+	void HardwareRasterizerDX11::KeyDownEvent(SDL_KeyboardEvent e)
+	{
+		Renderer::KeyDownEvent(e);
+
+		switch (e.keysym.scancode)
+		{
+		case SDL_SCANCODE_F4:
+		{
+			CycleFilterMode();
+		}
+		break;
+		}
 	}
 
 	ShaderID HardwareRasterizerDX11::AddEffect(Effect* pEffect)
@@ -99,9 +123,10 @@ namespace dae
 			pEffect->SetTextureMap(&ResourceManager::GetTextureDX11(material.textures[3]), "gGlossinessMap");
 
 			Matrix worldMat{ pMeshdx11->worldMatrix };
-			Matrix onbMat{ camera.invViewMatrix };
 			pEffect->SetWorldMatrix(worldMat);
+			Matrix onbMat{ camera.invViewMatrix };
 			pEffect->SetONBMatrix(onbMat);
+			pEffect->SetRasterizerState(m_pRasterizerStates.at(s_Settings.faceCullingMode));
 		}
 		else
 		{
@@ -271,11 +296,21 @@ namespace dae
 
 		pDxgiFactory->Release();
 
+		result = CreateRasterizerStates();
+		if (FAILED(result))
+			return result;
+
 		return S_OK;
 	}
 
 	void HardwareRasterizerDX11::ReleaseDirectXResources()
 	{
+		for (auto& pRasterizerState : m_pRasterizerStates)
+		{
+			pRasterizerState.second->Release();
+		}
+		m_pRasterizerStates.clear();
+
 		m_pRenderTargetView->Release();
 		m_pRenderTargetBuffer->Release();
 		m_pDepthStencilView->Release();
@@ -288,5 +323,91 @@ namespace dae
 			m_pDeviceContext->Release();
 		}
 		s_pDevice->Release();
+	}
+	HRESULT HardwareRasterizerDX11::CreateRasterizerStates()
+	{
+		HRESULT result{};
+
+		//=============================================================//
+		//						1. Backface                            //
+		//=============================================================//
+		m_pRasterizerStates[Renderer::FaceCullingMode::Backface] = nullptr;
+
+		D3D11_RASTERIZER_DESC rasterizerStateDesc;
+		rasterizerStateDesc.FillMode = D3D11_FILL_SOLID;
+		rasterizerStateDesc.CullMode = D3D11_CULL_BACK;
+		rasterizerStateDesc.FrontCounterClockwise = false;
+		rasterizerStateDesc.DepthBias = false;
+		rasterizerStateDesc.DepthBiasClamp = 0;
+		rasterizerStateDesc.SlopeScaledDepthBias = 0;
+		rasterizerStateDesc.DepthClipEnable = true;
+		rasterizerStateDesc.ScissorEnable = false;
+		rasterizerStateDesc.MultisampleEnable = false;
+		rasterizerStateDesc.AntialiasedLineEnable = false;
+
+		result = s_pDevice->CreateRasterizerState(
+			&rasterizerStateDesc, 
+			&m_pRasterizerStates[Renderer::FaceCullingMode::Backface]);
+
+		if (FAILED(result))
+			return result;
+
+		//=============================================================//
+		//						2. Frontface                           //
+		//=============================================================//
+
+		m_pRasterizerStates[Renderer::FaceCullingMode::Frontface] = nullptr;
+
+		rasterizerStateDesc.CullMode = D3D11_CULL_FRONT;
+
+		result = s_pDevice->CreateRasterizerState(
+			&rasterizerStateDesc,
+			&m_pRasterizerStates[Renderer::FaceCullingMode::Frontface]);
+
+		if (FAILED(result))
+			return result;
+
+		//=============================================================//
+		//						2. No culling                          //
+		//=============================================================//
+
+		m_pRasterizerStates[Renderer::FaceCullingMode::None] = nullptr;
+
+		rasterizerStateDesc.CullMode = D3D11_CULL_NONE;
+
+		result = s_pDevice->CreateRasterizerState(
+			&rasterizerStateDesc,
+			&m_pRasterizerStates[Renderer::FaceCullingMode::None]);
+
+		if (FAILED(result))
+			return result;
+
+		return S_OK;
+	}
+	void HardwareRasterizerDX11::CycleFilterMode()
+	{
+		size_t filterMode{ static_cast<size_t>(m_FilterMode) };
+		if (++filterMode == static_cast<size_t>(FilterMode::End))
+		{
+			filterMode = 0;
+		}
+		m_FilterMode = static_cast<FilterMode>(filterMode);
+
+		TSTRING msg{ _T("Filter mode : ") };
+		switch (m_FilterMode)
+		{
+		case FilterMode::Point:
+			msg.append(_T("Point"));
+			break;
+
+		case FilterMode::Linear:
+			msg.append(_T("Linear"));
+			break;
+
+		case FilterMode::Anisotropic:
+			msg.append(_T("Anisotropic"));
+			break;
+		}
+		PrintMessage(msg, MSG_LOGGER_HARDWARERASTERIZER, MSG_COLOR_HARDWARERASTERIZER);
 	}
 }

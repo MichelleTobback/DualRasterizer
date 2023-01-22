@@ -5,17 +5,20 @@
 #include "DataTypes.h"
 #include "ResourceManager.h"
 #include "Texture.h"
+#include "ConsoleLog.h"
 
+#include <array>
 #include <future>
 #include <ppl.h> // parallel_for
 
 //#define ASYNC
-#define PARALLEL_FOR
+//#define PARALLEL_FOR
 
 namespace dae
 {
-	Material* SoftwareRasterizer::m_pMaterialBuffer{ nullptr };
-	Matrix* SoftwareRasterizer::m_pTBNBuffer{nullptr};
+	using namespace Log;
+
+	Material* SoftwareRasterizer::s_pMaterialBuffer{ nullptr };
 
 	struct RenderStats
 	{
@@ -36,7 +39,10 @@ namespace dae
 		// set all depthbuffer elements to max float value
 		std::fill_n(m_pDepthBuffer, m_Width * m_Height, FLT_MAX);
 
-		std::cout << "Software rasterizer is initialized and ready!\n";
+		m_ClearColor = ColorRGB{ 0.39f, 0.39f, 0.39f };
+
+		TSTRING msg{ _T("\nSoftware rasterizer is initialized and ready!\n") };
+		PrintMessage(msg, MSG_LOGGER_SOFTWARERASTERIZER, MSG_COLOR_SOFTWARERASTERIZER, MSG_COLOR_SUCCESS);
 	}
 
 	SoftwareRasterizer::~SoftwareRasterizer()
@@ -49,12 +55,89 @@ namespace dae
 
 	}
 
+	void SoftwareRasterizer::KeyDownEvent(SDL_KeyboardEvent e)
+	{
+		Renderer::KeyDownEvent(e);
+
+		switch (e.keysym.scancode)
+		{
+		case SDL_SCANCODE_F5:
+		{
+			//cycle shading modes
+			ToggleShadingMode();
+		}
+		break;
+
+		case SDL_SCANCODE_F6:
+		{
+			//toggle normal map sampling
+			s_Settings.useNormalMap = !s_Settings.useNormalMap;
+			TSTRING msg{ _T("Normal map : ") + BoolToString(s_Settings.useNormalMap) };
+			PrintMessage(msg, MSG_LOGGER_SOFTWARERASTERIZER, MSG_COLOR_SOFTWARERASTERIZER);
+		}
+			break;
+
+		case SDL_SCANCODE_F7:
+		{
+			//toggle depth buffer visualization
+			s_Settings.visualizeDepthBuffer = !s_Settings.visualizeDepthBuffer;
+			TSTRING msg{ _T("Visualize depth buffer : ") + BoolToString(s_Settings.visualizeDepthBuffer) };
+			PrintMessage(msg, MSG_LOGGER_SOFTWARERASTERIZER, MSG_COLOR_SOFTWARERASTERIZER);
+		}
+			break;
+
+		case SDL_SCANCODE_F8:
+		{
+			//toggle bounding box visualization
+			s_Settings.visualizeBoundingBox = !s_Settings.visualizeBoundingBox;
+			TSTRING msg{ _T("Visualize bounding box : ") + BoolToString(s_Settings.visualizeBoundingBox) };
+			PrintMessage(msg, MSG_LOGGER_SOFTWARERASTERIZER, MSG_COLOR_SOFTWARERASTERIZER);
+		}
+			break;
+		}
+	}
+
+	void SoftwareRasterizer::ToggleShadingMode()
+	{
+		size_t shadingMode{ static_cast<size_t>(s_Settings.shadingMode) };
+		if (++shadingMode == static_cast<size_t>(Renderer::ShadingMode::End))
+		{
+			shadingMode = 0;
+		}
+		s_Settings.shadingMode = static_cast<Renderer::ShadingMode>(shadingMode);
+
+		TSTRING msg{ _T("Shading mode : ") };
+		switch (s_Settings.shadingMode)
+		{
+		case ShadingMode::Combined:
+			msg.append(_T("Combined"));
+			break;
+
+		case ShadingMode::ObservedArea:
+			msg.append(_T("Observed Area"));
+			break;
+
+		case ShadingMode::Diffuse:
+			msg.append(_T("Diffuse"));
+			break;
+
+		case ShadingMode::Specular:
+			msg.append(_T("Specular"));
+			break;
+		}
+		PrintMessage(msg, MSG_LOGGER_SOFTWARERASTERIZER, MSG_COLOR_SOFTWARERASTERIZER);
+	}
+
 	void SoftwareRasterizer::Render(Scene* pScene) const
 	{
 		SDL_LockSurface(m_pBackBuffer);
 
 		// clearColor
-		SDL_FillRect(m_pBackBuffer, NULL, SDL_MapRGB(m_pBackBuffer->format, 100, 100, 100));
+		const ColorRGB& clearColor{ GetClearColor() };
+		Uint8 r{ static_cast<Uint8>(clearColor.r * 255) };
+		Uint8 g{ static_cast<Uint8>(clearColor.g * 255) };
+		Uint8 b{ static_cast<Uint8>(clearColor.b * 255) };
+		SDL_FillRect(m_pBackBuffer, NULL, SDL_MapRGB(m_pBackBuffer->format, r, g, b));
 
 		// set all depthbuffer elements to max float value
 		std::fill_n(m_pDepthBuffer, m_Width * m_Height, FLT_MAX);
@@ -72,6 +155,9 @@ namespace dae
 		//RENDER LOGIC
 		for (auto& pMesh : pScene->m_pMeshes)
 		{
+			if (!pMesh->render)
+				continue;
+
 			RenderMesh(pMesh.get(), pScene->GetCamera());
 		}
 
@@ -84,7 +170,7 @@ namespace dae
 
 	void SoftwareRasterizer::RenderMesh(Mesh* pMesh, const Camera& camera) const
 	{
-		m_pMaterialBuffer = &ResourceManager::GetMaterial(pMesh->materialId);
+		s_pMaterialBuffer = &ResourceManager::GetMaterial(pMesh->materialId);
 
 		VertexTransformationFunction(*pMesh, camera);
 
@@ -119,7 +205,7 @@ namespace dae
 				}));
 			currentTriangleIndex += taskSize;
 		}
-//#elif defined(PARALLEL_FOR)
+#elif defined(PARALLEL_FOR)
 		static std::mutex renderMutex;
 		const uint32_t numTriangles{ static_cast<uint32_t>(pMesh->indices.size() / step) };
 		concurrency::parallel_for(0u, numTriangles, [=, this](int i)->void
@@ -130,7 +216,8 @@ namespace dae
 
 #else
 		size_t triangleIdx{};
-		for (size_t i{}; i + 3 <= pMesh->indices.size(); i += step)
+		const size_t maxIndices{ pMesh->indices.size() };
+		for (size_t i{}; i + 3 <= maxIndices; i += step)
 		{
 			ProcessTriangle(triangleIdx, pMesh);
 			++triangleIdx;
@@ -143,123 +230,113 @@ namespace dae
 	{
 		mesh.vertices_out.clear();
 		mesh.vertices_out.resize(mesh.vertices.size());
-		Matrix worldViewProjectionMatrix{ mesh.worldMatrix * camera.viewMatrix * camera.ProjectionMatrix };
+		const Matrix worldViewProjectionMatrix{ mesh.worldMatrix * camera.viewMatrix * camera.ProjectionMatrix };
 
-		uint32_t numVerts{ static_cast<uint32_t>(mesh.vertices.size()) };
-		//static std::mutex renderMutex;
-#if defined(PARALLEL_FOR)
-		concurrency::parallel_for(0u, numVerts, [&](int i)->void
-			{
-				//std::lock_guard<std::mutex> lock(renderMutex);
-				VertexShading(i, mesh.vertices[i], mesh, worldViewProjectionMatrix, camera);
-			});
-#else
+		const uint32_t numVerts{ static_cast<uint32_t>(mesh.vertices.size()) };
 
 		for (size_t i{}; i < numVerts; i++)
 		{
-			VertexShading(i, vertex, mesh, worldViewProjectionMatrix, camera);
+			const auto& vertex{ mesh.vertices[i] };
+			Vertex_Out transformedVertex{};
+
+			//to viewspace
+			Vector4 vertexPos{ vertex.position.x, vertex.position.y, vertex.position.z, 1.f };
+			transformedVertex.position = worldViewProjectionMatrix.TransformPoint(vertexPos);
+
+			//parse unchanged data
+			transformedVertex.uv = vertex.uv;
+
+			// to viewspace
+			transformedVertex.normal = mesh.worldMatrix.TransformVector(vertex.normal);
+
+			transformedVertex.tangent = mesh.worldMatrix.TransformVector(vertex.tangent);
+
+			transformedVertex.viewDirection = (mesh.worldMatrix.TransformPoint(vertex.position)) - camera.origin;
+			transformedVertex.viewDirection.Normalize();
+
+			mesh.vertices_out[i] = transformedVertex;
 		}
-#endif
-	}
-
-	void SoftwareRasterizer::VertexShading(size_t i, const Vertex& vertex, Mesh& mesh, const Matrix& worldViewProjectionMatrix, const Camera& camera) const
-	{
-		Vertex_Out transformedVertex{};
-
-		//to viewspace
-		Vector4 vertexPos{ vertex.position.x, vertex.position.y, vertex.position.z, 1.f };
-		transformedVertex.position = worldViewProjectionMatrix.TransformPoint(vertexPos);
-
-		//parse unchanged data
-		transformedVertex.uv = vertex.uv;
-		//transformedVertex.color = vertex.color;
-
-		// to viewspace
-		transformedVertex.normal = mesh.worldMatrix.TransformVector(vertex.normal);
-		//transformedVertex.normal.Normalize();
-
-		transformedVertex.tangent = mesh.worldMatrix.TransformVector(vertex.tangent);
-		//transformedVertex.tangent.Normalize();
-
-		transformedVertex.viewDirection = (mesh.worldMatrix.TransformPoint(vertex.position)) - camera.origin;
-		//transformedVertex.viewDirection.Normalize();
-		//transformedVertex.worldPos = (mesh.worldMatrix.TransformPoint(vertexPos));
-
-		mesh.vertices_out[i] = transformedVertex;
 	}
 
 	Vector2 SoftwareRasterizer::VertexToScreenSpace(const Vector4& vertex) const
 	{
 		return
 		{
-			(vertex.x + 1) / 2.f * m_Width,
-			(1.f - vertex.y) / 2.f * m_Height
+			(vertex.x + 1) * 0.5f * m_Width,
+			(1.f - vertex.y) * 0.5f * m_Height
 		};
 	}
 
-	bool SoftwareRasterizer::IsPixelInTriangle(const Triangle& verts, const Vector2& pixel, float* crossArr) const
+	bool SoftwareRasterizer::IsPixelInTriangle(const TriangleVec2& verts, const Vector2& pixel, float* crossArr) const
 	{
-		Vector2 v0{ VertexToScreenSpace(verts[0].position) };
-		Vector2 v1{ VertexToScreenSpace(verts[1].position) };
-		Vector2 v2{ VertexToScreenSpace(verts[2].position) };
+		Vector2 edge0{ verts[1] - verts[0]};
+		Vector2 vertToPixel0{ pixel - verts[0]};
+		crossArr[2] = Vector2::Cross(vertToPixel0, edge0);
 
-		if (!IsPixelAtCorrectSide(v0, v1, pixel, crossArr[2]))
-			return false;
-		if (!IsPixelAtCorrectSide(v1, v2, pixel, crossArr[0]))
-			return false;
-		if (!IsPixelAtCorrectSide(v2, v0, pixel, crossArr[1]))
-			return false;
+		Vector2 edge1{ verts[2] - verts[1] };
+		Vector2 vertToPixel1{ pixel - verts[1] };
+		crossArr[0] = Vector2::Cross(vertToPixel1, edge1);
 
-		return true;
+		Vector2 edge2{ verts[0] - verts[2] };
+		Vector2 vertToPixel2{ pixel - verts[2] };
+		crossArr[1] = Vector2::Cross(vertToPixel2, edge2);
+
+		switch (s_Settings.faceCullingMode)
+		{
+		case FaceCullingMode::Frontface:
+			return crossArr[0] >= 0.f && crossArr[1] >= 0.f && crossArr[2] >= 0.f;
+			break;
+
+		case FaceCullingMode::Backface:
+			return crossArr[0] <= 0.f && crossArr[1] <= 0.f && crossArr[2] <= 0.f;
+			break;
+
+		case FaceCullingMode::None:
+			return (crossArr[0] >= 0.f && crossArr[1] >= 0.f && crossArr[2] >= 0.f)
+				|| (crossArr[0] <= 0.f && crossArr[1] <= 0.f && crossArr[2] <= 0.f);
+			break;
+		}
+
+		return false;
 	}
 
-	bool SoftwareRasterizer::IsPixelAtCorrectSide(const Vector2& v0, const Vector2& v1, const Vector2& pixel, float& cross) const
+	bool SoftwareRasterizer::IsPointInFrustum(const Vector4& point) const
 	{
-		Vector2 edge{ v1 - v0 };
-		Vector2 vertToPixel{ pixel - v0 };
-		cross = Vector2::Cross(vertToPixel, edge);
-		return cross <= 0.f;
+		return !(point.x < -1.f || point.x > 1.f 
+			|| point.y < -1.f || point.y > 1.f 
+			|| point.z < 0.f || point.z > 1.f);
 	}
 
 	void SoftwareRasterizer::PerspectiveDivide(Triangle& triangle) const
 	{
-		for (size_t i{}; i < triangle.size(); i++)
+		for (size_t i{}; i < triangle.Size(); i++)
 		{
-			triangle[i].position.x /= triangle[i].position.w;
-			triangle[i].position.y /= triangle[i].position.w;
-			triangle[i].position.z /= triangle[i].position.w;
-		}
+			float invW{ 1.f / triangle[i].position.w };
 
-		//for (auto& vertex : triangle)
-		//{
-		//	vertex.position.x /= vertex.position.w;
-		//	vertex.position.y /= vertex.position.w;
-		//	vertex.position.z /= vertex.position.w;
-		//}
+			triangle[i].position.x *= invW;
+			triangle[i].position.y *= invW;
+			triangle[i].position.z *= invW;
+		}
 	}
 
-	void SoftwareRasterizer::GetBoundingBoxPixelsFromTriangle(const Triangle& triangle, int& minX, int& minY, int& maxX, int& maxY) const
+	void SoftwareRasterizer::GetBoundingBoxPixelsFromTriangle(const TriangleVec2& triangle, int& minX, int& minY, int& maxX, int& maxY) const
 	{
-		Vector2 v0{ VertexToScreenSpace(triangle[0].position) };
-		Vector2 v1{ VertexToScreenSpace(triangle[1].position) };
-		Vector2 v2{ VertexToScreenSpace(triangle[2].position) };
-
-		minX = int(v0.x);
-		minY = int(v0.y);
+		minX = int(triangle[0].x);
+		minY = int(triangle[0].y);
 		maxX = minX;
 		maxY = minY;
 
-		minX = Min(minX, int(v1.x));
-		minY = Min(minY, int(v1.y));
+		minX = Min(minX, int(triangle[1].x));
+		minY = Min(minY, int(triangle[1].y));
 
-		maxX = Max(maxX, int(v1.x));
-		maxY = Max(maxY, int(v1.y));
+		maxX = Max(maxX, int(triangle[1].x));
+		maxY = Max(maxY, int(triangle[1].y));
 
-		minX = Min(minX, int(v2.x));
-		minY = Min(minY, int(v2.y));
+		minX = Min(minX, int(triangle[2].x));
+		minY = Min(minY, int(triangle[2].y));
 
-		maxX = Max(maxX, int(v2.x));
-		maxY = Max(maxY, int(v2.y));
+		maxX = Max(maxX, int(triangle[2].x));
+		maxY = Max(maxY, int(triangle[2].y));
 
 		minX = Clamp(minX - 1, 0, m_Width - 1);
 		minY = Clamp(minY - 1, 0, m_Height - 1);
@@ -320,129 +397,14 @@ namespace dae
 
 		Triangle triangle{ pMesh->vertices_out[i0], pMesh->vertices_out[i1], pMesh->vertices_out[i2] };
 
-		if (!TriangleClipTest(triangle))
+		PerspectiveDivide(triangle);
+
+		if (!IsPointInFrustum(triangle[0].position)
+			|| !IsPointInFrustum(triangle[1].position)
+			|| !IsPointInFrustum(triangle[2].position))
 			return;
 
-		const auto clip1VertOutside{ [this](Triangle& triangle) -> void
-			{
-				const float t0{ (-triangle[0].position.z) / (triangle[1].position.z - triangle[0].position.z)};
-				const float t1{ (-triangle[0].position.z) / (triangle[2].position.z - triangle[0].position.z)};
-				const auto v0Lerped0{ LerpVertex(triangle[0], triangle[1], t0)};
-				const auto v0Lerped1{ LerpVertex(triangle[0], triangle[2], t1)};
-				//draw 2 triangles
-				triangle[0] = v0Lerped0;
-				RenderTriangle(triangle);
-				triangle[0] = v0Lerped1;
-				RenderTriangle(triangle);
-			} };
-		const auto clip2VertsOutside{ [this](Triangle& triangle) -> void
-			{
-				const float t0{ (-triangle[0].position.z) / (triangle[2].position.z - triangle[0].position.z)};
-				const float t1{ (-triangle[1].position.z) / (triangle[2].position.z - triangle[1].position.z)};
-				triangle[0] = LerpVertex(triangle[0], triangle[2], t0);
-				triangle[1] = LerpVertex(triangle[1], triangle[2], t1);
-
-				//draw 1 triangle
-				RenderTriangle(triangle);
-			} };
-
-		TriangleNearClipTest(triangle, clip1VertOutside, clip2VertsOutside);
-	}
-
-	bool SoftwareRasterizer::TriangleClipTest(const Triangle& triangle) const
-	{
-		// clipping tests
-		if (triangle[0].position.x > triangle[0].position.w &&
-			triangle[1].position.x > triangle[1].position.w &&
-			triangle[2].position.x > triangle[2].position.w)
-			return false;
-
-		if (triangle[0].position.x < -triangle[0].position.w &&
-			triangle[1].position.x < -triangle[1].position.w &&
-			triangle[2].position.x < -triangle[2].position.w)
-			return false;
-
-		if (triangle[0].position.y > triangle[0].position.w &&
-			triangle[1].position.y > triangle[1].position.w &&
-			triangle[2].position.y > triangle[2].position.w)
-			return false;
-
-		if (triangle[0].position.y < -triangle[0].position.w &&
-			triangle[1].position.y < -triangle[1].position.w &&
-			triangle[2].position.y < -triangle[2].position.w)
-			return false;
-
-		if (triangle[0].position.z > triangle[0].position.w &&
-			triangle[1].position.z > triangle[1].position.w &&
-			triangle[2].position.z > triangle[2].position.w)
-			return false;
-
-		if (triangle[0].position.z < 0.f &&
-			triangle[1].position.z < 0.f &&
-			triangle[2].position.z < 0.f)
-			return false;
-
-		return true;
-	}
-
-	void SoftwareRasterizer::TriangleNearClipTest(Triangle& triangle, 
-		std::function<void(Triangle& triangle)> case1,
-		std::function<void(Triangle& triangle)> case2) const
-	{
-		if (triangle[0].position.z < 0.f)
-		{
-			if (triangle[1].position.z < 0.f)
-			{
-				//v0 and v1 are on the wrong side
-				//case2(triangle[0], triangle[1], triangle[2]);
-				case2(triangle);
-			}
-			else if (triangle[2].position.z < 0.f)
-			{
-				//v0 and v2 are on the wrong side
-				//case2(triangle[0], triangle[2], triangle[1]);
-				std::swap(triangle[1], triangle[2]);
-				case2(triangle);
-			}
-			else
-			{
-				// only v0 is at the wrong side
-				//case1(triangle[0], triangle[1], triangle[2]);
-				case1(triangle);
-			}
-		}
-		else if (triangle[1].position.z < 0.f)
-		{
-			if (triangle[2].position.z < 0.f)
-			{
-				//v1 and v2 are on the wrong side
-				//case2(triangle[1], triangle[2], triangle[0]);
-				std::swap(triangle[0], triangle[1]);
-				std::swap(triangle[1], triangle[2]);
-				case2(triangle);
-			}
-			else
-			{
-				//only v1 is at the wrong side
-				//case1(triangle[1], triangle[0], triangle[2]);
-				std::swap(triangle[0], triangle[1]);
-				case1(triangle);
-			}
-		}
-		else if (triangle[2].position.z < 0.f)
-		{
-			//only v2 is at the wrong side
-			//case1(triangle[2], triangle[0], triangle[1]);
-			std::swap(triangle[0], triangle[2]);
-			std::swap(triangle[1], triangle[2]);
-			case1(triangle);
-		}
-		else
-		{
-			// all verts are inside, no clipping
-			//rendertriangle
-			RenderTriangle(triangle);
-		}
+		RenderTriangle(triangle);
 	}
 
 	Vertex_Out SoftwareRasterizer::LerpVertex(const Vertex_Out& triangle0, const Vertex_Out& triangle1, float t) const
@@ -460,16 +422,16 @@ namespace dae
 
 	Uint32 SoftwareRasterizer::PixelShading(const Vertex_Out& vertex) const
 	{
-		assert(m_pMaterialBuffer && "materialbuffer is nullptr!\n");
+		assert(s_pMaterialBuffer && "materialbuffer is nullptr!\n");
 
 		ColorRGB colorOut{};
 
-		switch (m_pMaterialBuffer->shaderId)
+		switch (s_pMaterialBuffer->shaderId)
 		{
 		case 0:
-			colorOut = LambertPixelShader(vertex);
+			colorOut = VehiclePixelShader(vertex);
 			break;
-
+		
 		case 1:
 			colorOut = FlatPixelShader(vertex);
 			break;
@@ -484,29 +446,55 @@ namespace dae
 			static_cast<uint8_t>(colorOut.b * 255));
 	}
 
+	Vector3 SoftwareRasterizer::SampleNormalMap(const Vector3& normal, const Vector3& tangent, const Vector2& uv, const TextureSoftware& normalMap) const
+	{
+		const Vector3 binormal = Vector3::Cross(normal, tangent).Normalized();
+		const Matrix tbn = Matrix{ tangent ,binormal, normal, Vector3::Zero };
+
+		const ColorRGB normalColor{ (2 * normalMap.Sample(uv)) - ColorRGB{1,1,1} };
+		const Vector3 normalSample{ normalColor.r,normalColor.g,normalColor.b };
+		return tbn.TransformVector(normalSample).Normalized();
+	}
+
+	ColorRGB SoftwareRasterizer::VehiclePixelShader(const Vertex_Out& vertex) const
+	{
+		switch (s_Settings.shadingMode)
+		{
+		case ShadingMode::Combined:
+			return LambertPixelShader(vertex);
+			break;
+
+		case ShadingMode::ObservedArea:
+			return ObservedAreaPixelShader(vertex);
+			break;
+
+		case ShadingMode::Diffuse:
+			return DiffusePixelShader(vertex);
+			break;
+
+		case ShadingMode::Specular:
+			return SpecularPixelShader(vertex);
+			break;
+		}
+		return ColorRGB();
+	}
+
 	ColorRGB SoftwareRasterizer::LambertPixelShader(const Vertex_Out& vertex) const
 	{
-		//Vector3 viewDir{ (vertex.worldPos.GetXYZ() - m_pCameraBuffer->invViewMatrix[3].GetXYZ())};
 		Vector3 viewDir{ (vertex.viewDirection) };
-		//viewDir.Normalize();
 
 		//get textures
-		auto& diffuseMap{ ResourceManager::GetTexture(m_pMaterialBuffer->textures[0]) };
-		auto& normalMap{ ResourceManager::GetTexture(m_pMaterialBuffer->textures[1]) };
-		auto& specularMap{ ResourceManager::GetTexture(m_pMaterialBuffer->textures[2]) };
-		auto& glossinessMap{ ResourceManager::GetTexture(m_pMaterialBuffer->textures[3]) };
+		auto& diffuseMap{ ResourceManager::GetTexture(s_pMaterialBuffer->textures[0]) };
+		auto& normalMap{ ResourceManager::GetTexture(s_pMaterialBuffer->textures[1]) };
+		auto& specularMap{ ResourceManager::GetTexture(s_pMaterialBuffer->textures[2]) };
+		auto& glossinessMap{ ResourceManager::GetTexture(s_pMaterialBuffer->textures[3]) };
 
 		ColorRGB colorOut{};
 
 		//normal
-		Vector3 normal{};
-		const Vector3 binormal = Vector3::Cross(vertex.normal, vertex.tangent).Normalized();
-		const Matrix tbn = Matrix{ vertex.tangent,binormal,vertex.normal,Vector3::Zero };
-
-		const ColorRGB normalColor{ (2 * normalMap.Sample(vertex.uv)) - ColorRGB{1,1,1} };
-		const Vector3 normalSample{ normalColor.r,normalColor.g,normalColor.b };
-		normal = tbn.TransformVector(normalSample);
-		normal.Normalize();
+		Vector3 normal{(s_Settings.useNormalMap) 
+			? SampleNormalMap(vertex.normal, vertex.tangent, vertex.uv, normalMap)
+			: vertex.normal};
 
 		//shading
 		float observedArea{ Max(Vector3::Dot(normal, -m_pLightBuffer->direction), 0.f) };
@@ -516,7 +504,7 @@ namespace dae
 		ColorRGB diffuse{ Lambert(1.f, baseColor) };
 		float spec{ specularMap.Sample(vertex.uv).r };
 		float glossiness{ 25.f };
-		float exp{ specularMap.Sample(vertex.uv).r * glossiness };
+		float exp{ glossinessMap.Sample(vertex.uv).r * glossiness };
 		ColorRGB specular{ spec * Phong(1.f, exp, -m_pLightBuffer->direction, viewDir, normal) };
 
 		colorOut = ambient + specular + diffuse * observedArea * m_pLightBuffer->intensity;
@@ -527,109 +515,175 @@ namespace dae
 	ColorRGB SoftwareRasterizer::FlatPixelShader(const Vertex_Out& vertex) const
 	{
 		//get textures
-		auto& diffuseMap{ ResourceManager::GetTexture(m_pMaterialBuffer->textures[0]) };
+		auto& diffuseMap{ ResourceManager::GetTexture(s_pMaterialBuffer->textures[0]) };
 
 		ColorRGBA colorSample{ diffuseMap.SampleRGBA(vertex.uv)};
 		Uint8 r{}, g{}, b{};
 		SDL_GetRGB(m_pBackBufferPixels[s_RenderStats.currentPixel], m_pBackBuffer->format, &r, &g, &b);
-		ColorRGB backBufferColor{r / 255.f, g / 255.f, b / 255.f};
+		constexpr const float colorDivider{ 1.f / 255.f };
+		ColorRGB backBufferColor{r * colorDivider, g * colorDivider, b * colorDivider };
+
+		if (colorSample.a <= 0.0001f)
+			return backBufferColor;
 
 		ColorRGB colorOut{ ColorRGB::Lerp(backBufferColor, colorSample.Rgb(), colorSample.a)};
+		//ColorRGB colorOut{ (1.f - colorSample.a) * backBufferColor
+		//	+ colorSample.a * colorSample.Rgb() };
 
 		return colorOut;
 	}
 
+	ColorRGB SoftwareRasterizer::ObservedAreaPixelShader(const Vertex_Out& vertex) const
+	{
+		//normal
+		auto& normalMap{ ResourceManager::GetTexture(s_pMaterialBuffer->textures[1]) };
+		Vector3 normal{ (s_Settings.useNormalMap)
+			? SampleNormalMap(vertex.normal, vertex.tangent, vertex.uv, normalMap)
+			: vertex.normal };
+
+		float oa{ Max(Vector3::Dot(normal, -m_pLightBuffer->direction), 0.f) };
+		return { oa, oa, oa };
+	}
+
+	ColorRGB SoftwareRasterizer::DiffusePixelShader(const Vertex_Out& vertex) const
+	{
+		auto& diffuseMap{ ResourceManager::GetTexture(s_pMaterialBuffer->textures[0]) };
+		auto& normalMap{ ResourceManager::GetTexture(s_pMaterialBuffer->textures[1]) };
+		Vector3 normal{ (s_Settings.useNormalMap)
+			? SampleNormalMap(vertex.normal, vertex.tangent, vertex.uv, normalMap)
+			: vertex.normal };
+		float oa{ Max(Vector3::Dot(normal, -m_pLightBuffer->direction), 0.f) };
+		ColorRGB baseColor{ diffuseMap.Sample(vertex.uv) };
+		return Lambert(1.f, baseColor) * oa * m_pLightBuffer->intensity;
+	}
+
+	ColorRGB SoftwareRasterizer::SpecularPixelShader(const Vertex_Out& vertex) const
+	{
+		auto& normalMap{ ResourceManager::GetTexture(s_pMaterialBuffer->textures[1]) };
+		auto& specularMap{ ResourceManager::GetTexture(s_pMaterialBuffer->textures[2]) };
+		auto& glossinessMap{ ResourceManager::GetTexture(s_pMaterialBuffer->textures[3]) };
+
+		//normal
+		Vector3 normal{ (s_Settings.useNormalMap)
+			? SampleNormalMap(vertex.normal, vertex.tangent, vertex.uv, normalMap)
+			: vertex.normal };
+
+		float spec{ specularMap.Sample(vertex.uv).r };
+		float glossiness{ 25.f };
+		float exp{ glossinessMap.Sample(vertex.uv).r * glossiness };
+		return { spec * Phong(1.f, exp, -m_pLightBuffer->direction, vertex.viewDirection, normal) };
+	}
+
 	void SoftwareRasterizer::RenderTriangle(Triangle& triangle) const
 	{
-		PerspectiveDivide(triangle);
+		const float invPosW0{ 1.f / triangle[0].position.w };
+		const float invPosW1{ 1.f / triangle[1].position.w };
+		const float invPosW2{ 1.f / triangle[2].position.w };
+
+		TriangleVec2 triangleScreenSpace
+		{
+			VertexToScreenSpace(triangle[0].position),
+			VertexToScreenSpace(triangle[1].position),
+			VertexToScreenSpace(triangle[2].position)
+		};
 
 		//find pixelrange to test overlap
 		int minX{}, minY{}, maxX{}, maxY{};
-		GetBoundingBoxPixelsFromTriangle(triangle, minX, minY, maxX, maxY);
+		GetBoundingBoxPixelsFromTriangle(triangleScreenSpace, minX, minY, maxX, maxY);
 
 		for (int px{ minX }; px < maxX; ++px)
 		{
 			for (int py{ minY }; py < maxY; ++py)
 			{
 				s_RenderStats.currentPixel = size_t(px + (py * m_Width));
+
+				if (s_Settings.visualizeBoundingBox)
+				{
+					m_pBackBufferPixels[s_RenderStats.currentPixel] = RGB(255, 255, 255);
+					continue;
+				}
+
 				float crossArr[3]{};
 
-				if (IsPixelInTriangle(triangle, { float(px), float(py) }, crossArr))
+				if (IsPixelInTriangle(triangleScreenSpace, { float(px), float(py) }, crossArr))
 				{
+					std::array<float, 3> weights{};
+					CalculateBarycentricWeights(weights[0], weights[1], weights[2], crossArr);
+
 					float pixelZ{ 1.f / GetBarycentricInterpolation(
 						1.f / triangle[0].position.z,
 						1.f / triangle[1].position.z,
-						1.f / triangle[2].position.z, crossArr) };
+						1.f / triangle[2].position.z, weights) };
 
-					if (pixelZ >= 0.f && pixelZ <= 1.f && //frustum clipping
-						pixelZ < m_pDepthBuffer[s_RenderStats.currentPixel]) //depthtest
+					if (pixelZ > 1.f || pixelZ < 0.f)
+						break;
+
+					if (pixelZ < m_pDepthBuffer[s_RenderStats.currentPixel]) //depthtest
 					{
-						m_pDepthBuffer[s_RenderStats.currentPixel] = pixelZ;
-						float interpelatedW{ 1.f / GetBarycentricInterpolation(
-						1.f / triangle[0].position.w,
-						1.f / triangle[1].position.w,
-						1.f / triangle[2].position.w, crossArr) };
+						if (s_pMaterialBuffer->depthWrite)
+							m_pDepthBuffer[s_RenderStats.currentPixel] = pixelZ;
 
-						Vector2 currentUv{ interpelatedW * GetBarycentricInterpolation(
-							triangle[0].uv / triangle[0].position.w,
-							triangle[1].uv / triangle[1].position.w,
-							triangle[2].uv / triangle[2].position.w, crossArr) };
-
-						Vector4 currentPos{ GetBarycentricInterpolation(
-							triangle[0].position,
-							triangle[1].position,
-							triangle[2].position, crossArr) * interpelatedW };
-
-						//ColorRGB currentColor{ interpelatedW * GetBarycentricInterpolation(
-						//	triangle[0].color,
-						//	triangle[1].color,
-						//	triangle[2].color, crossArr) };
-
-						Vector3 currentNormal{ interpelatedW * GetBarycentricInterpolation(
-							triangle[0].normal,
-							triangle[1].normal,
-							triangle[2].normal, crossArr) };
-
-						Vector3 currentTangent{ interpelatedW * GetBarycentricInterpolation(
-							triangle[0].tangent,
-							triangle[1].tangent,
-							triangle[2].tangent, crossArr) };
-
-						Vector3 viewDirection{ interpelatedW * GetBarycentricInterpolation(
-							triangle[0].viewDirection,
-							triangle[1].viewDirection,
-							triangle[2].viewDirection, crossArr) };
-
-						//Vector4 currentWorldPos{ GetBarycentricInterpolation(
-						//	triangle[0].worldPos,
-						//	triangle[1].worldPos,
-						//	triangle[2].worldPos, crossArr) * interpelatedW };
-
-						currentNormal.Normalize();
-						currentTangent.Normalize();
-						viewDirection.Normalize();
-
-						Vertex_Out currentPixelData
+						if (s_Settings.visualizeDepthBuffer)
 						{
-							currentPos,
-							//currentColor,
-							currentUv,
-							currentNormal,
-							currentTangent,
-							viewDirection
-							//currentWorldPos
-						};
+							ColorRGB depthColor{ pixelZ, pixelZ, pixelZ };
+							depthColor.MaxToOne();
+							float depthRemapped = Remap(depthColor.r, 0.997f, 1.f);
+							m_pBackBufferPixels[s_RenderStats.currentPixel] = SDL_MapRGB(m_pBackBuffer->format,
+								static_cast<uint8_t>(depthRemapped * 255),
+								static_cast<uint8_t>(depthRemapped * 255),
+								static_cast<uint8_t>(depthRemapped * 255));
+							continue;
+						}
+
+						const float interpelatedW{ 1.f / GetBarycentricInterpolation(
+						invPosW0,
+						invPosW1,
+						invPosW2, weights) };
+
+						Vertex_Out currentPixelData{};
+
+						currentPixelData.uv = interpelatedW * GetBarycentricInterpolation(
+							triangle[0].uv * invPosW0,
+							triangle[1].uv * invPosW1,
+							triangle[2].uv * invPosW2, weights);
+
+						currentPixelData.position = GetBarycentricInterpolation(
+							triangle[0].position * invPosW0,
+							triangle[1].position * invPosW1,
+							triangle[2].position * invPosW2, weights) * interpelatedW;
+
+						currentPixelData.normal = interpelatedW * GetBarycentricInterpolation(
+							triangle[0].normal * invPosW0,
+							triangle[1].normal * invPosW1,
+							triangle[2].normal * invPosW2, weights);
+
+						currentPixelData.tangent = interpelatedW * GetBarycentricInterpolation(
+							triangle[0].tangent * invPosW0,
+							triangle[1].tangent * invPosW1,
+							triangle[2].tangent * invPosW2, weights);
+
+						currentPixelData.viewDirection = interpelatedW * GetBarycentricInterpolation(
+							triangle[0].viewDirection * invPosW0,
+							triangle[1].viewDirection * invPosW1,
+							triangle[2].viewDirection * invPosW2, weights);
+
+						currentPixelData.normal.Normalize();
+						currentPixelData.tangent.Normalize();
+						currentPixelData.viewDirection.Normalize();
 
 						m_pBackBufferPixels[s_RenderStats.currentPixel] = PixelShading(currentPixelData);
 					}
 				}
 			}
 		}
+
 	}
+
+	
 
 	ColorRGB SoftwareRasterizer::Lambert(float kd, const ColorRGB& cd) const
 	{
-		return kd * cd / PI;
+		return kd * cd * PI_INV;
 	}
 
 	ColorRGB SoftwareRasterizer::Phong(float ks, float exp, const Vector3& l, const Vector3& v, const Vector3& n) const

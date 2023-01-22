@@ -28,9 +28,12 @@ namespace dae
 
 		// operator overloading
 		Vector4 operator*(float scale) const;
+		Vector4 operator/(float scale) const;
 		Vector4 operator+(const Vector4& v) const;
 		Vector4 operator-(const Vector4& v) const;
 		Vector4& operator+=(const Vector4& v);
+		Vector4& operator/=(float scale);
+		Vector4& operator*=(float scale);
 		float& operator[](int index);
 		float operator[](int index) const;
 	};

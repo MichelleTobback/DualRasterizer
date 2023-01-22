@@ -27,6 +27,7 @@ float3 gLightDirection = { 0.577f, -0.577f, 0.577f };
 float4x4 gWorldViewProj : WorldViewProjection;
 float4x4 gWorldMat : WORLD;
 float4x4 gONB : VIEWINVERSE;
+RasterizerState gRasterizerState : RASTERIZERSTATE;
 
 Texture2D gDiffuseMap : DiffuseMap;
 Texture2D gNormalMap : NormalMap;
@@ -61,13 +62,8 @@ SamplerState gSamAnisotropic
 //			  States			   //
 //=================================//
 
-RasterizerState gRasterizerState
+BlendState gBlendState 
 {
-	CullMode = back; //default
-	FrontCounterClockwise = false; //default
-};
-
-BlendState gBlendState {
 	AlphaToCoverageEnable = FALSE;
 	BlendEnable[0] = FALSE;
 };
@@ -75,7 +71,7 @@ BlendState gBlendState {
 DepthStencilState gDepthStencilState
 {
 	DepthEnable = true;
-	DepthWriteMask = 0x0F;
+	DepthWriteMask = 1;
 	DepthFunc = less;
 	StencilEnable = false;
 

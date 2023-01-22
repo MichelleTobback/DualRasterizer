@@ -160,6 +160,7 @@ namespace dae
 
 			return true;
 		}
+
 #pragma warning(pop)
 	}
 }

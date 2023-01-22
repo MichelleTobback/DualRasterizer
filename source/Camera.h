@@ -71,12 +71,11 @@ namespace dae
 		{
 			//Camera Update Logic
 			const float deltaTime = pTimer->GetElapsed();
-			const float movementSpeed{ 8.f };
-			const float rotSpeed{ PI_DIV_4 / 2.f };
+			float movementSpeed{ 25.f };
+			constexpr float rotSpeed{ PI_DIV_4 * 0.005f };
 
 			//Keyboard Input
 			const uint8_t* pKeyboardState = SDL_GetKeyboardState(nullptr);
-
 
 			//Mouse Input
 			int mouseX{}, mouseY{};
@@ -84,6 +83,13 @@ namespace dae
 
 			//todo: W2
 			bool hasMoved{ false };
+
+			if (pKeyboardState[SDL_SCANCODE_LSHIFT])
+			{
+				constexpr float movementSpeedMultiply{ 2.1f };
+				movementSpeed *= movementSpeedMultiply;
+			}
+
 			if (pKeyboardState[SDL_SCANCODE_W])
 			{
 				origin += (forward * movementSpeed * deltaTime);
@@ -116,28 +122,24 @@ namespace dae
 			{
 				if (mouseState & SDL_BUTTON(3))
 				{
-					totalYaw += float(mouseX) * rotSpeed * deltaTime;
-					totalPitch -= float(mouseY) * rotSpeed * deltaTime;
+					totalYaw += (float(mouseX) * rotSpeed);
+					totalPitch -= (float(mouseY) * rotSpeed);
 					hasRotated = true;
 					hasMoved = true;
 				}
 				else if (mouseState & SDL_BUTTON(1))
 				{
-					totalYaw += float(mouseX) * rotSpeed * deltaTime;
+					totalYaw += (float(mouseX) * rotSpeed);
 					origin += forward * -float(mouseY) * movementSpeed * deltaTime;
 					hasRotated = true;
 					hasMoved = true;
 				}
 			}
 
-			//if (totalPitch >= PI_2)
-			//	totalPitch = 0.f;
-			//if (totalPitch < 0.f)
-			//	totalPitch = PI_2;
-			//if (totalYaw >= PI_2)
-			//	totalYaw = 0.f;
-			//if (totalYaw < 0.f)
-			//	totalYaw = PI_2;
+			if (totalPitch >= PI_2)
+				totalPitch = 0.01f;
+			else if (totalPitch < 0.01f)
+				totalPitch = PI_2;
 
 			if (hasRotated)
 			{
@@ -153,7 +155,6 @@ namespace dae
 			{
 				CalculateViewMatrix();
 			}
-			//CalculateProjectionMatrix(); //Try to optimize this - should only be called once or when fov/aspectRatio changes
 		}
 
 		inline void SetFOV(float angle)

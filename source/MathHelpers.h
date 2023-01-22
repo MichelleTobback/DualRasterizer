@@ -17,6 +17,8 @@ namespace dae
 	constexpr auto PI_2 = 6.283185307179586476925f;
 	constexpr auto PI_4 = 12.56637061435917295385f;
 
+	constexpr auto PI_INV = (1.f / PI);
+
 	constexpr auto TO_DEGREES = (180.0f / PI);
 	constexpr auto TO_RADIANS(PI / 180.0f);
 
@@ -67,6 +69,15 @@ namespace dae
 	inline T Max(const T a, const T b)
 	{
 		return (a > b) ? a : b;
+	}
+
+	template <typename T>
+	inline T Remap(T value, T low, T high)
+	{
+		if (value < low)
+			value = low;
+		//assert(low < high && "low is not smaller than high, result will be NaN or Inf!");
+		return (value - low) / (high - low);
 	}
 
 }

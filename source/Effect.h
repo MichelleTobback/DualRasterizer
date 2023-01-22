@@ -53,6 +53,7 @@ namespace dae
 		void SetTextureMap(TextureDX11* pTexture, const char* slot);
 		void SetONBMatrix(Matrix& matrix);
 		void SetWorldMatrix(Matrix& matrix);
+		void SetRasterizerState(ID3D11RasterizerState* pRasterizerState);
 
 	private:
 		void CreateTextureVar(const char* varName);
@@ -61,6 +62,7 @@ namespace dae
 
 		ID3DX11EffectMatrixVariable* m_pWorldMatrixVar{ nullptr };
 		ID3DX11EffectMatrixVariable* m_pONBMatrixVar{ nullptr };
+		ID3DX11EffectRasterizerVariable* m_pFaceCullModeVar{ nullptr };
 	};
 
 	class FlatEffect : public Effect

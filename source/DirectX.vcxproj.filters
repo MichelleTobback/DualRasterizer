@@ -46,6 +46,7 @@
     <ClInclude Include="Utils.h" />
     <ClInclude Include="ResourceManager.h" />
     <ClInclude Include="ColorRGBA.h" />
+    <ClInclude Include="ConsoleLog.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />

@@ -4,9 +4,12 @@
 #include "HardwareRasterizerDX11.h"
 #include "Effect.h"
 #include "ResourceManager.h"
+#include "ConsoleLog.h"
 
 namespace dae
 {
+	using namespace Log;
+
 	//==========================//
 	// base scene
 	//==========================//
@@ -74,6 +77,7 @@ namespace dae
 		Material fireFxMaterial{};
 		fireFxMaterial.shaderId = flatShaderEffect;
 		fireFxMaterial.textures.push_back(fireFxMap);
+		fireFxMaterial.depthWrite = false;
 		auto fireFxeMatId{ ResourceManager::AddMaterial(fireFxMaterial) };
 
 		//create meshes
@@ -105,8 +109,19 @@ namespace dae
 		{
 			//toggle rotation
 			m_Rotate = !m_Rotate;
+			TSTRING msg{ _T("Rotation : ") + BoolToString(m_Rotate)};
+			PrintMessage(msg, MSG_LOGGER_SHARED, MSG_COLOR_SCENE);
 		}
-		break;
+			break;
+
+		case SDL_SCANCODE_F3:
+		{
+			//toggle combustion mesh
+			m_pMeshes[1]->render = !m_pMeshes[1]->render;
+			TSTRING msg{ _T("FireFX mesh : ") + BoolToString(m_pMeshes[1]->render) };
+			PrintMessage(msg, MSG_LOGGER_SHARED, MSG_COLOR_SCENE);
+		}
+			break;
 		}
 	}
 }

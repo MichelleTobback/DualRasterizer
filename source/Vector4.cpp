@@ -71,6 +71,12 @@ namespace dae
 		return { x * scale, y * scale, z * scale, w * scale };
 	}
 
+	Vector4 Vector4::operator/(float scale) const
+	{
+		const float divider{ 1.f / scale };
+		return { x * divider, y * divider, z * divider, w * divider };
+	}
+
 	Vector4 Vector4::operator+(const Vector4& v) const
 	{
 		return { x + v.x, y + v.y, z + v.z, w + v.w };
@@ -87,6 +93,24 @@ namespace dae
 		y += v.y;
 		z += v.z;
 		w += v.w;
+		return *this;
+	}
+
+	Vector4& Vector4::operator/=(float scale)
+	{
+		x /= scale;
+		y /= scale;
+		z /= scale;
+		w /= scale;
+		return *this;
+	}
+
+	Vector4& Vector4::operator*=(float scale)
+	{
+		x *= scale;
+		y *= scale;
+		z *= scale;
+		w *= scale;
 		return *this;
 	}
 
